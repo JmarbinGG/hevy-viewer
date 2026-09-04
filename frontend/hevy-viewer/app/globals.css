@@ -90,6 +90,8 @@ body {
 .app-shell input::placeholder { color: var(--muted); }
 .exercise-active { background: var(--accent); color: var(--accent-foreground); }
 .exercise-option:hover { background: var(--surface); color: var(--accent); }
+.recharts-wrapper:focus,
+.recharts-surface:focus { outline: none; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 2rem; }
 .segmented-control { display: flex; border: 1px solid var(--border); padding: 0.2rem; }
 .segment, .segment-active { min-width: 3.5rem; padding: 0.45rem 0.7rem; font-size: 0.75rem; font-weight: 600; letter-spacing: 0.08em; }

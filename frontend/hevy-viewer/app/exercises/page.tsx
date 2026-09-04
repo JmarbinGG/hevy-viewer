@@ -302,9 +302,7 @@ export default function ExercisesPage() {
                 <div className="border border-zinc-300 p-5 dark:border-zinc-800">
                   <h2 className="text-2xl font-semibold tracking-tight">{selected.name}</h2>
                   <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                    {(selected.total_volume_kg * (settings.unitSystem === "lb" ? 2.20462 : 1)).toLocaleString(undefined, {
-                      maximumFractionDigits: 0,
-                    })} {settings.unitSystem} total volume · {selected.set_count} sets
+                    {(Math.round(selected.total_volume_kg * (settings.unitSystem === "lb" ? 2.20462 : 1) * 10) / 10).toFixed(1)} {settings.unitSystem} total volume · {selected.set_count} sets
                   </p>
                 </div>
 

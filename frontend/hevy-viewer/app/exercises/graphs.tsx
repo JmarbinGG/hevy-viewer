@@ -59,6 +59,11 @@ function formatDateLabel(value: number): string {
   });
 }
 
+function formatWeight(value: number, unit: string): string {
+  const rounded = Math.round(value * 10) / 10;
+  return `${rounded.toFixed(1)} ${unit}`;
+}
+
 function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { config: GraphConfig }): ReactNode {
   const data = toTimeSeries(points, config.valueKey);
   const multiplier = unitSystem === "lb" ? 2.20462 : 1;
@@ -71,7 +76,7 @@ function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { con
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={displayData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
+        <LineChart data={displayData} margin={{ top: 20, right: 20, left: 12, bottom: 12 }}>
           <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 2" />
           <XAxis
             dataKey="timestamp"
@@ -84,14 +89,19 @@ function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { con
           />
           <YAxis
             dataKey="value"
+            width={72}
             stroke="var(--chart-axis)"
-            tickFormatter={(value: number) => `${value.toFixed(0)} ${unit}`}
+            tickFormatter={(value: number) => formatWeight(value, unit)}
+            domain={[
+              (dataMin: number) => Math.max(0, dataMin - Math.max(dataMin * 0.08, 1)),
+              (dataMax: number) => dataMax + Math.max(dataMax * 0.08, 1),
+            ]}
             allowDecimals={false}
           />
           <Tooltip
             labelFormatter={(value) => formatDateLabel(Number(value))}
             formatter={(value) => [
-              `${Number(value ?? 0).toFixed(2)} ${unit}`,
+              formatWeight(Number(value ?? 0), unit),
               config.label,
             ]}
             contentStyle={{ backgroundColor: "var(--tooltip-surface)", borderColor: "var(--border)", color: "var(--tooltip-text)" }}
