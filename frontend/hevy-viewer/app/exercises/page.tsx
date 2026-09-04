@@ -67,7 +67,7 @@ export default function ExercisesPage() {
         setExercises(data);
         if (data.length > 0) {
           setLoadingGraph(true);
-          setSelectedExercise(data[0].name);
+          setSelectedExercise([...data].sort((a, b) => b.workout_count - a.workout_count || b.set_count - a.set_count || a.name.localeCompare(b.name))[0].name);
         }
       } catch (err: unknown) {
         if (cancelled) {
@@ -150,6 +150,10 @@ export default function ExercisesPage() {
     () => exercises.find((exercise) => exercise.name === selectedExercise) ?? null,
     [exercises, selectedExercise],
   );
+  const sortedExercises = useMemo(
+    () => [...exercises].sort((a, b) => b.workout_count - a.workout_count || b.set_count - a.set_count || a.name.localeCompare(b.name)),
+    [exercises],
+  );
 
   function logout(): void {
     clearCachedCredentials();
@@ -169,7 +173,7 @@ export default function ExercisesPage() {
       setDataStatus(status);
       const data = await fetchExercises(credentials);
       setExercises(data);
-      setSelectedExercise(data[0]?.name ?? null);
+      setSelectedExercise([...data].sort((a, b) => b.workout_count - a.workout_count || b.set_count - a.set_count || a.name.localeCompare(b.name))[0]?.name ?? null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to refresh workout data");
     } finally {
@@ -259,7 +263,7 @@ export default function ExercisesPage() {
                 <p className="px-4 py-3 text-sm text-zinc-500">No exercises found.</p>
               ) : (
                 <ul>
-                  {exercises.map((exercise) => {
+                  {sortedExercises.map((exercise) => {
                     const isActive = selectedExercise === exercise.name;
                     return (
                       <li key={exercise.id} className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-800">
