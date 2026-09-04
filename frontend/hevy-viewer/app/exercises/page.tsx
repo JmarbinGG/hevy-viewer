@@ -7,6 +7,7 @@ import { clearCachedCredentials, readCachedCredentials } from "./auth-cache";
 import { fetchDataStatus, fetchExerciseGraph, fetchExercises, refreshData } from "./api";
 import { EXERCISE_GRAPHS, GraphPoint } from "./graphs";
 import { DataStatus, ExerciseSummary, HevyCredentials } from "./types";
+import { applyTheme, readSettings, ViewerSettings } from "../settings";
 
 type GraphPointsById = Record<string, GraphPoint[]>;
 
@@ -23,6 +24,17 @@ export default function ExercisesPage() {
   const [dataStatus, setDataStatus] = useState<DataStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGraphId, setSelectedGraphId] = useState(EXERCISE_GRAPHS[0]?.id ?? "");
+  const [settings, setSettings] = useState<ViewerSettings>(readSettings);
+
+  useEffect(() => {
+    applyTheme(settings.colorTheme);
+    const handleSettingsChange = (event: Event) => {
+      const next = (event as CustomEvent<ViewerSettings>).detail;
+      setSettings(next);
+    };
+    window.addEventListener("hevy-settings-change", handleSettingsChange);
+    return () => window.removeEventListener("hevy-settings-change", handleSettingsChange);
+  }, [settings.colorTheme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,7 +179,7 @@ export default function ExercisesPage() {
 
   if (hasCredentials === false) {
     return (
-      <div className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
+      <div className="app-shell min-h-screen">
         <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-6 py-16">
           <h1 className="text-3xl font-semibold tracking-tight">Exercises</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
@@ -175,7 +187,7 @@ export default function ExercisesPage() {
           </p>
           <Link
             href="/login"
-            className="inline-flex w-fit border border-black px-5 py-2 text-sm font-medium transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black"
+            className="control-button"
           >
             Go to login
           </Link>
@@ -185,7 +197,7 @@ export default function ExercisesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
+    <div className="app-shell min-h-screen">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-10 md:px-10">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-300 pb-6 dark:border-zinc-800">
           <div>
@@ -194,15 +206,21 @@ export default function ExercisesPage() {
           </div>
           <div className="flex items-center gap-3">
             <Link
+              href="/settings"
+              className="control-button"
+            >
+              Settings
+            </Link>
+            <Link
               href="/"
-              className="border border-black px-4 py-2 text-sm tracking-wide transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black"
+              className="control-button"
             >
               Home
             </Link>
             <button
               type="button"
               onClick={logout}
-              className="border border-black px-4 py-2 text-sm tracking-wide transition-colors hover:bg-black hover:text-white dark:border-white dark:hover:bg-white dark:hover:text-black"
+              className="control-button"
             >
               Log out
             </button>
@@ -224,7 +242,7 @@ export default function ExercisesPage() {
               type="button"
               onClick={() => void handleRefresh()}
               disabled={refreshing}
-              className="border border-black px-4 py-2 text-xs font-medium uppercase tracking-wide transition-colors hover:bg-black hover:text-white disabled:cursor-wait disabled:opacity-50 dark:border-white dark:hover:bg-white dark:hover:text-black"
+              className="control-button text-xs uppercase disabled:cursor-wait disabled:opacity-50"
             >
               {refreshing ? "Refreshing..." : "Refresh"}
             </button>
@@ -257,8 +275,8 @@ export default function ExercisesPage() {
                           }}
                           className={`w-full px-4 py-3 text-left transition-colors ${
                             isActive
-                              ? "bg-black text-white dark:bg-white dark:text-black"
-                              : "hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                              ? "exercise-active"
+                              : "exercise-option"
                           }`}
                         >
                           <p className="text-sm font-medium">{exercise.name}</p>
@@ -284,7 +302,9 @@ export default function ExercisesPage() {
                 <div className="border border-zinc-300 p-5 dark:border-zinc-800">
                   <h2 className="text-2xl font-semibold tracking-tight">{selected.name}</h2>
                   <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                    {selected.total_volume_kg.toLocaleString()} kg total volume · {selected.set_count} sets
+                    {(selected.total_volume_kg * (settings.unitSystem === "lb" ? 2.20462 : 1)).toLocaleString(undefined, {
+                      maximumFractionDigits: 0,
+                    })} {settings.unitSystem} total volume · {selected.set_count} sets
                   </p>
                 </div>
 
@@ -319,11 +339,14 @@ export default function ExercisesPage() {
                 ) : (
                   (() => {
                     const graph = EXERCISE_GRAPHS.find((item) => item.id === selectedGraphId);
+                    const filteredPoints = (graphs[graph?.id ?? ""] ?? []).filter((point) =>
+                      !settings.startDate || point.time.slice(0, 10) >= settings.startDate,
+                    );
                     return graph ? (
                       <article className="border border-zinc-300 p-5 dark:border-zinc-800">
                         <h3 className="text-lg font-semibold">{graph.title}</h3>
                         <p className="mt-1 mb-4 text-sm text-zinc-500">{graph.description}</p>
-                        {graph.render({ points: graphs[graph.id] ?? [] })}
+                        {graph.render({ points: filteredPoints, unitSystem: settings.unitSystem })}
                       </article>
                     ) : null;
                   })()

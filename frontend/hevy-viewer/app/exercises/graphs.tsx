@@ -11,11 +11,13 @@ import {
   YAxis,
 } from "recharts";
 import { MaxWeightPoint, OneRepMaxPoint, VolumePoint } from "./types";
+import { UnitSystem } from "../settings";
 
 export type GraphPoint = VolumePoint | MaxWeightPoint | OneRepMaxPoint;
 
 type GraphRendererProps = {
   points: GraphPoint[];
+  unitSystem?: UnitSystem;
 };
 
 export type GraphConfig = {
@@ -57,8 +59,11 @@ function formatDateLabel(value: number): string {
   });
 }
 
-function Graph({ points, config }: GraphRendererProps & { config: GraphConfig }): ReactNode {
+function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { config: GraphConfig }): ReactNode {
   const data = toTimeSeries(points, config.valueKey);
+  const multiplier = unitSystem === "lb" ? 2.20462 : 1;
+  const unit = unitSystem === "lb" ? "lb" : "kg";
+  const displayData = data.map((point) => ({ ...point, value: point.value * multiplier }));
   if (data.length === 0) {
     return <p className="text-sm text-zinc-500">No {config.label.toLowerCase()} data available yet.</p>;
   }
@@ -66,40 +71,40 @@ function Graph({ points, config }: GraphRendererProps & { config: GraphConfig })
   return (
     <div className="h-80 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
-          <CartesianGrid stroke="#e4e4e7" strokeDasharray="2 2" />
+        <LineChart data={displayData} margin={{ top: 8, right: 16, left: 4, bottom: 8 }}>
+          <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 2" />
           <XAxis
             dataKey="timestamp"
             type="number"
             scale="time"
             domain={["dataMin", "dataMax"]}
             tickFormatter={formatDateLabel}
-            stroke="#52525b"
+            stroke="var(--chart-axis)"
             minTickGap={24}
           />
           <YAxis
             dataKey="value"
-            stroke="#52525b"
-            tickFormatter={(value: number) => `${value.toFixed(0)} kg`}
+            stroke="var(--chart-axis)"
+            tickFormatter={(value: number) => `${value.toFixed(0)} ${unit}`}
             allowDecimals={false}
           />
           <Tooltip
             labelFormatter={(value) => formatDateLabel(Number(value))}
             formatter={(value) => [
-              `${Number(value ?? 0).toFixed(2)} kg`,
+              `${Number(value ?? 0).toFixed(2)} ${unit}`,
               config.label,
             ]}
-            contentStyle={{ color: "#111111" }}
-            itemStyle={{ color: "#111111" }}
-            labelStyle={{ color: "#111111" }}
+            contentStyle={{ backgroundColor: "var(--tooltip-surface)", borderColor: "var(--border)", color: "var(--tooltip-text)" }}
+            itemStyle={{ color: "var(--tooltip-text)" }}
+            labelStyle={{ color: "var(--tooltip-text)" }}
           />
           <Line
             type="monotone"
             dataKey="value"
-            stroke="#ffffff"
+            stroke="var(--chart-line)"
             strokeWidth={2}
-            dot={{ r: 3, fill: "#FFFFFF" }}
-            activeDot={{ r: 5 }}
+            dot={{ r: 3, fill: "var(--chart-line)" }}
+            activeDot={{ r: 5, fill: "var(--chart-line)", stroke: "var(--tooltip-surface)" }}
           />
         </LineChart>
       </ResponsiveContainer>

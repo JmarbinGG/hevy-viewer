@@ -34,7 +34,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white text-black dark:bg-black dark:text-white">
+    <div className="app-shell min-h-screen">
       <main className="mx-auto flex w-full max-w-xl flex-col gap-8 px-6 py-16">
         <header className="space-y-3">
           <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Hevy Viewer</p>
@@ -59,7 +59,7 @@ export default function LoginPage() {
               value={emailOrUsername}
               onChange={(event) => setEmailOrUsername(event.target.value)}
               required
-              className="w-full border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none transition-colors focus:border-black dark:border-zinc-700 dark:focus:border-white"
+              className="control-input w-full"
             />
           </label>
 
@@ -70,14 +70,14 @@ export default function LoginPage() {
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               required
-              className="w-full border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none transition-colors focus:border-black dark:border-zinc-700 dark:focus:border-white"
+              className="control-input w-full"
             />
           </label>
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full border border-black px-4 py-2 text-sm font-medium tracking-wide transition-colors hover:bg-black hover:text-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-white dark:hover:bg-white dark:hover:text-black"
+            className="control-button w-full disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSubmitting ? "Signing in..." : "Sign in"}
           </button>
