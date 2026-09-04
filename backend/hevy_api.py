@@ -90,6 +90,7 @@ GRAPH_BUILDERS: dict[str, ExerciseGraphBuilder] = {
     "volume_over_time": volume_over_time,
     "max_over_time": max_over_time,
     "one_rep_max_over_time": one_rep_max_over_time,
+    "one_rep_max": one_rep_max_over_time,
 }
 
 

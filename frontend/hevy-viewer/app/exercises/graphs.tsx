@@ -127,7 +127,7 @@ export const EXERCISE_GRAPHS: GraphConfig[] = [
     render: (props) => <Graph {...props} config={EXERCISE_GRAPHS[1]} />,
   },
   {
-    id: "one_rep_max_over_time",
+    id: "one_rep_max",
     label: "Estimated 1RM",
     title: "Estimated 1RM over time",
     description: "Estimated one-repetition maximum using Epley's formula: weight × (1 + reps / 30).",
