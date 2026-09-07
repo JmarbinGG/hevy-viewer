@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import time
+import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -422,6 +423,48 @@ def sanitize_workout(value: Any) -> Any:
     return sanitized
 
 
+def _derive_routines_from_workouts(workouts: list[Any]) -> list[dict[str, Any]]:
+    routines: dict[str, dict[str, Any]] = {}
+    for workout in workouts:
+        if not isinstance(workout, dict):
+            continue
+        routine_id = str(workout.get("routine_id") or "")
+        if not routine_id:
+            continue
+
+        routine = routines.setdefault(
+            routine_id,
+            {
+                "id": routine_id,
+                "name": workout.get("name") or workout.get("title") or "Untitled Routine",
+                "exercises": [],
+            },
+        )
+        existing_exercises = {
+            str(exercise.get("id") or exercise.get("title") or "")
+            for exercise in routine["exercises"]
+            if isinstance(exercise, dict)
+        }
+        exercises = workout.get("exercises")
+        if not isinstance(exercises, list):
+            continue
+        for exercise in exercises:
+            if not isinstance(exercise, dict):
+                continue
+            exercise_key = str(exercise.get("id") or exercise.get("title") or "")
+            if exercise_key and exercise_key not in existing_exercises:
+                routine["exercises"].append(
+                    {
+                        "id": exercise.get("id"),
+                        "title": exercise.get("title"),
+                        "exercise_template_id": exercise.get("exercise_template_id"),
+                    }
+                )
+                existing_exercises.add(exercise_key)
+
+    return sorted(routines.values(), key=lambda routine: str(routine["name"]).lower())
+
+
 def load_payload(output_path: str | os.PathLike[str] = DEFAULT_DATA_FILE) -> dict[str, Any] | None:
     path = Path(output_path)
     if not path.exists():
@@ -441,6 +484,8 @@ def load_payload(output_path: str | os.PathLike[str] = DEFAULT_DATA_FILE) -> dic
         if not isinstance(routines, list):
             raise ValueError("Saved Hevy data did not include a routines list")
         payload["routines"] = [sanitize_workout(item) for item in routines]
+    if not payload.get("routines"):
+        payload["routines"] = _derive_routines_from_workouts(payload["workouts"])
     sanitized_json = json.dumps(payload, indent=2, sort_keys=True) + "\n"
     if path.read_text(encoding="utf-8") != sanitized_json:
         path.write_text(sanitized_json, encoding="utf-8")
@@ -525,7 +570,26 @@ def save_payload(payload: dict[str, Any], output_path: str | os.PathLike[str]) -
     """Write the complete fetch payload in the format consumed by the parser."""
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(serialized)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+            temporary_path = Path(temporary_file.name)
+        os.replace(temporary_path, path)
+        temporary_path = None
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def parse_args() -> argparse.Namespace:
