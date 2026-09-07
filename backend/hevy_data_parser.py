@@ -218,16 +218,37 @@ def list_routines(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(routines, list):
         raise ValueError("Expected payload['routines'] to be a list")
 
-    summaries: list[dict[str, Any]] = []
+    workouts = payload.get("workouts")
+    if not isinstance(workouts, list):
+        raise ValueError("Expected payload['workouts'] to be a list")
+
+    # Free-account workout history includes routine ids and names even when the
+    # dedicated routines endpoint is unavailable.
+    definitions: dict[str, dict[str, Any]] = {}
     for routine in routines:
         if not isinstance(routine, Mapping):
             continue
+        routine_id = _routine_id(routine)
+        if routine_id:
+            definitions[routine_id] = dict(routine)
+    for workout in workouts:
+        if not isinstance(workout, Mapping):
+            continue
+        routine_id = str(workout.get("routine_id") or "")
+        if routine_id and routine_id not in definitions:
+            definitions[routine_id] = {
+                "id": routine_id,
+                "name": workout.get("name") or workout.get("title") or "Untitled Routine",
+            }
+
+    summaries: list[dict[str, Any]] = []
+    for routine in definitions.values():
         routine_id = _routine_id(routine)
         if not routine_id:
             continue
 
         analytics = aggregate_routine_metrics(
-            {"workouts": payload.get("workouts", [])}, routine_id
+            {"workouts": workouts}, routine_id
         )
         exercises = routine.get("exercises")
         exercise_names: list[str] = []
@@ -240,12 +261,24 @@ def list_routines(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
                 },
                 key=str.lower,
             )
+        if not exercise_names:
+            exercise_names = sorted(
+                {
+                    _exercise_name(exercise)
+                    for workout in workouts
+                    if isinstance(workout, Mapping)
+                    and str(workout.get("routine_id") or "") == routine_id
+                    for exercise in workout.get("exercises", [])
+                    if isinstance(exercise, Mapping)
+                },
+                key=str.lower,
+            )
         summaries.append(
             {
                 "id": routine_id,
                 "name": _routine_name(routine),
                 "title": _routine_name(routine),
-                "exercise_count": len(exercises) if isinstance(exercises, list) else 0,
+                "exercise_count": len(exercise_names),
                 "exercises": exercise_names,
                 "workout_count": analytics["workout_count"],
                 "total_volume_kg": analytics["total_volume_kg"],

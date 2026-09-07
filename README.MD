@@ -57,7 +57,14 @@ Optional backend settings:
 ```env
 FRONTEND_ORIGIN=http://localhost:3000
 HEVY_DATA_FILE=backend/hevy_data.json
+LOG_LEVEL=INFO
+HEVY_VERBOSE_LOGGING=false
 ```
+
+Set `HEVY_VERBOSE_LOGGING=true` (or `LOG_LEVEL=DEBUG`) while diagnosing
+authentication. The backend logs request URLs, status codes, timings, response
+field names, cache decisions, and reCAPTCHA progress. Passwords, API keys, and
+tokens are not logged.
 
 Optional frontend setting:
 

@@ -215,6 +215,7 @@ export default function ExercisesPage() {
             >
               Settings
             </Link>
+            <Link href="/routines" className="control-button">Routines</Link>
             <Link
               href="/"
               className="control-button"

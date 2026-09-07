@@ -49,3 +49,28 @@ export type ExerciseGraphResponse = {
   graph: string;
   points: VolumePoint[] | MaxWeightPoint[] | OneRepMaxPoint[];
 };
+
+export type RoutineSummary = {
+  id: string;
+  title: string;
+  exercise_count: number;
+  workout_count: number;
+  total_volume_kg: number;
+  total_estimated_1rm_kg: number;
+  last_workout: string | null;
+};
+
+export type RoutineComparisonPoint = {
+  workout_id: string;
+  time: string;
+  volume_kg: number;
+  estimated_1rm_kg: number;
+};
+
+export type RoutineAnalytics = {
+  routine_id: string;
+  workout_count: number;
+  total_volume_kg: number;
+  total_estimated_1rm_kg: number;
+  comparison_points: RoutineComparisonPoint[];
+};

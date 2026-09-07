@@ -21,6 +21,7 @@ export default function Home() {
           >
             Exercises
           </Link>
+          <Link href="/routines" className="control-button">Routines</Link>
         </div>
       </main>
     </div>
