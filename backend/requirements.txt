@@ -1,4 +1,6 @@
 flask
+flask-cors
 python-dotenv
 requests
 playwright
+ratelimit

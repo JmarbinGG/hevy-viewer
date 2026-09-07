@@ -12,6 +12,8 @@ and retry backoff for rate limits and transient server errors.
 - `POST /api/data-refresh`
 - `POST /api/exercises`
 - `POST /api/exercises/<exercise_name>/graphs/volume_over_time`
+- `POST /api/routines`
+- `POST /api/routines/<routine_id>/analytics`
 
 ## Required environment variables
 
@@ -31,6 +33,8 @@ Hevy credentials are provided by the frontend request body:
 
 - `FRONTEND_ORIGIN` (default: `http://localhost:3000`)
 - `HEVY_DATA_FILE` (default: `backend/hevy_data.json`)
+- `LOG_LEVEL` (default: `INFO`; set to `DEBUG` for diagnostic request logging)
+- `HEVY_VERBOSE_LOGGING` (default: disabled; set to `true` to force diagnostic logging)
 
 ## Run
 
@@ -46,3 +50,12 @@ another file.
 ```bash
 python hevy_login.py --output hevy_data.json
 ```
+
+Refreshes also fetch and cache routine definitions from Hevy's
+`GET /v1/routines?page&pageSize` endpoint. Routine analytics are calculated
+from cached workouts using total set volume and summed Epley estimated 1RM,
+with one comparison point per workout.
+
+Routine synchronization is optional. If Hevy rejects the routines endpoint
+with HTTP 401 for a free-account token, login and workout synchronization still
+complete and cached routines are preserved.
