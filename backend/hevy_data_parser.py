@@ -466,6 +466,91 @@ def list_workouts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
+PR_TYPES = ("best_1rm", "best_weight", "best_volume", "best_reps")
+
+
+def list_prs(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Personal records Hevy flagged on sets, one per session, exercise and record type.
+
+    ``prs`` is newest first.  Each entry says how much it beat the previous record
+    (``change_pct``); the first record of an exercise has ``is_first`` set and no
+    comparison.  ``records`` is the current best per exercise, most recently
+    improved first.
+    """
+    workouts = payload.get("workouts")
+    if not isinstance(workouts, list):
+        raise ValueError("Expected payload['workouts'] to be a list")
+
+    ordered = sorted(
+        (workout for workout in workouts if isinstance(workout, Mapping)),
+        key=lambda workout: _parse_time(_workout_start(workout.get("start_time"))),
+    )
+    previous_best: dict[tuple[str, str], float] = {}
+    entries: list[dict[str, Any]] = []
+    for workout in ordered:
+        per_session: dict[tuple[str, str], dict[str, Any]] = {}
+        for exercise in workout.get("exercises") or []:
+            if not isinstance(exercise, Mapping):
+                continue
+            name = _exercise_name(exercise)
+            for index, set_data in enumerate(exercise.get("sets") or [], start=1):
+                if not isinstance(set_data, Mapping):
+                    continue
+                for pr in set_data.get("prs") or []:
+                    if not isinstance(pr, Mapping) or pr.get("type") not in PR_TYPES:
+                        continue
+                    value = _to_float(pr.get("value"))
+                    if value <= 0:
+                        continue
+                    key = (name, str(pr["type"]))
+                    if key in per_session and per_session[key]["value"] > value:
+                        continue
+                    per_session[key] = {
+                        "workout_id": str(workout.get("id") or ""),
+                        "time": _workout_start(workout.get("start_time")),
+                        "workout_name": str(workout.get("name") or workout.get("title") or "Workout"),
+                        "routine_id": str(workout.get("routine_id") or "") or None,
+                        "exercise": name,
+                        "muscle_group": _muscle_group(exercise),
+                        "image_url": exercise.get("custom_exercise_image_url") or exercise.get("thumbnail_url"),
+                        "type": str(pr["type"]),
+                        "value": round(value, 2),
+                        "weight_kg": round(_to_float(set_data.get("weight_kg")), 2),
+                        "reps": _to_float(set_data.get("reps")),
+                        "set_index": index,
+                    }
+        for key, entry in per_session.items():
+            before = previous_best.get(key)
+            entry["previous_value"] = round(before, 2) if before is not None else None
+            entry["change_pct"] = round((entry["value"] - before) / before * 100, 1) if before else None
+            entry["is_first"] = before is None
+            previous_best[key] = max(before or 0.0, entry["value"])
+            entries.append(entry)
+
+    records: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        record = records.setdefault(entry["exercise"], {
+            "exercise": entry["exercise"],
+            "muscle_group": entry["muscle_group"],
+            "image_url": entry["image_url"],
+            "last_pr_time": entry["time"],
+            "bests": {},
+        })
+        record["last_pr_time"] = entry["time"]
+        record["image_url"] = record["image_url"] or entry["image_url"]
+        record["bests"][entry["type"]] = {
+            "value": entry["value"],
+            "time": entry["time"],
+            "weight_kg": entry["weight_kg"],
+            "reps": entry["reps"],
+        }
+    entries.sort(key=lambda item: (_parse_time(item["time"]), PR_TYPES.index(item["type"])), reverse=True)
+    return {
+        "prs": entries,
+        "records": sorted(records.values(), key=lambda item: _parse_time(item["last_pr_time"]), reverse=True),
+    }
+
+
 def routine_analytics(
     payload: Mapping[str, Any], routine_id: str
 ) -> dict[str, Any]:

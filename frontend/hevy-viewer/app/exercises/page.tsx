@@ -9,6 +9,7 @@ import { DataStatus, ExerciseSummary, HevyCredentials } from "./types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
 import { TopBar } from "../top-bar";
+import { ErrorNotice } from "../error-notice";
 import { pct, shortDate, tone } from "../format";
 
 const METRIC_NAMES: Record<string, string> = {
@@ -75,7 +76,7 @@ export default function ExercisesPage() {
       }
 
       try {
-        const status = await fetchDataStatus();
+        const status = await fetchDataStatus(credentials);
         if (!cancelled) {
           setDataStatus(status);
         }
@@ -244,7 +245,7 @@ export default function ExercisesPage() {
       <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-6 px-6 py-6 md:h-full md:px-12 xl:px-16">
         <TopBar />
 
-        {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
+        {error ? <ErrorNotice message={error} /> : null}
 
         {dataStatus?.needs_refresh ? (
           <div className="flex flex-wrap items-center justify-between gap-4 border-l-2 border-[var(--accent)] pl-4 text-sm">

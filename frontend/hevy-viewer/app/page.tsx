@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { readCachedCredentials } from "./exercises/auth-cache";
 import { TopBar } from "./top-bar";
-import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchRoutines } from "./exercises/api";
-import { DataStatus, ExerciseSummary, MuscleComparisonRow, RoutineAnalytics, RoutineSummary } from "./exercises/types";
+import { ErrorNotice } from "./error-notice";
+import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchPrs, fetchRoutines } from "./exercises/api";
+import { DataStatus, ExerciseSummary, MuscleComparisonRow, PersonalRecord, RoutineAnalytics, RoutineSummary } from "./exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "./settings";
 import { pct, shortDate, tone, toneVar } from "./format";
 import { ChangeBar } from "./change-bar";
@@ -46,6 +47,7 @@ export default function Home() {
   const [analytics, setAnalytics] = useState<Record<string, RoutineAnalytics>>({});
   const [exercises, setExercises] = useState<ExerciseSummary[]>([]);
   const [status, setStatus] = useState<DataStatus | null>(null);
+  const [prs, setPrs] = useState<PersonalRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,16 +67,18 @@ export default function Home() {
         return;
       }
       try {
-        const [routineList, allAnalytics, exerciseList, dataStatus] = await Promise.all([
+        const [routineList, allAnalytics, exerciseList, dataStatus, prData] = await Promise.all([
           fetchRoutines(credentials),
           fetchAllRoutineAnalytics(credentials),
           fetchExercises(credentials),
-          fetchDataStatus(),
+          fetchDataStatus(credentials),
+          fetchPrs(credentials),
         ]);
         setRoutines([...routineList].sort((a, b) => b.workout_count - a.workout_count || a.title.localeCompare(b.title)));
         setAnalytics(allAnalytics);
         setExercises(exerciseList);
         setStatus(dataStatus);
+        setPrs(prData.prs.filter((pr) => !pr.is_first));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Could not load your data.");
       } finally {
@@ -107,6 +111,14 @@ export default function Home() {
     }
     return count;
   }, [routines, analytics]);
+
+  const prsThisMonth = useMemo(() => {
+    const now = new Date();
+    return prs.filter((pr) => {
+      const date = new Date(pr.time);
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+    }).length;
+  }, [prs]);
 
   const topExercises = useMemo(
     () => [...exercises].sort((a, b) => b.workout_count - a.workout_count || b.set_count - a.set_count).slice(0, TOP_EXERCISES),
@@ -142,7 +154,7 @@ export default function Home() {
       <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-16 px-6 py-6 md:px-12 xl:px-16">
         <TopBar />
 
-        {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
+        {error ? <ErrorNotice message={error} /> : null}
 
         <section className="grid gap-x-20 gap-y-14 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div>
@@ -157,7 +169,7 @@ export default function Home() {
               ))}
             </ul>
             <p className="mt-8 text-sm tabular-nums text-[var(--muted)]">
-              {loading ? "" : `${thisMonth} sessions this month · ${status?.workout_count ?? "—"} workouts logged · updated ${status?.last_updated ? shortDate(status.last_updated) : "—"}`}
+              {loading ? "" : `${thisMonth} sessions and ${prsThisMonth} records this month · ${status?.workout_count ?? "—"} workouts logged · updated ${status?.last_updated ? shortDate(status.last_updated) : "—"}`}
             </p>
           </div>
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+import re
 from datetime import date
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.parse import unquote
@@ -15,9 +15,11 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 import logging
 
+from hevy_auth import AuthError, HevyCredentials, PasswordStore, SessionStore
 from hevy_data_parser import (
     aggregate_routine_metrics,
     list_exercises,
+    list_prs,
     list_routines,
     list_workouts,
     max_over_time,
@@ -39,12 +41,6 @@ from hevy_login import (
 from ratelimit import limits, sleep_and_retry
 
 ExerciseGraphBuilder = Callable[[list[dict[str, Any]], str], list[dict[str, Any]]]
-
-
-@dataclass(frozen=True)
-class HevyCredentials:
-    email_or_username: str
-    password: str
 
 
 def _fetch_payload(credentials: HevyCredentials) -> dict[str, Any]:
@@ -130,13 +126,23 @@ def create_app() -> Flask:
     app.logger.setLevel(logging.DEBUG if os.getenv("HEVY_VERBOSE_LOGGING", "").lower() in {"1", "true", "yes", "on"} else logging.INFO)
     CORS(app)
     logging.getLogger('flask_cors').level = logging.DEBUG
+    sessions = SessionStore()
+    passwords = PasswordStore(Path(os.getenv("HEVY_AUTH_FILE") or Path(__file__).with_name(".auth.json")))
+
+    def session_credentials() -> HevyCredentials:
+        header = request.headers.get("Authorization", "")
+        token = header[len("Bearer "):] if header.startswith("Bearer ") else ""
+        credentials = sessions.get(token) if token else None
+        if credentials is None:
+            raise AuthError("Invalid Hevy credentials: your session expired. Sign in again.")
+        return credentials
 
     @app.after_request
     def add_cors_headers(response):  # type: ignore[no-untyped-def]
         allowed_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
         response.headers["Access-Control-Allow-Origin"] = allowed_origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
         return response
 
     @app.get("/health")
@@ -145,6 +151,7 @@ def create_app() -> Flask:
 
     @app.get("/api/data-status")
     def data_status() -> Any:
+        session_credentials()
         payload = load_payload(os.getenv("HEVY_DATA_FILE", DEFAULT_DATA_FILE))
         if payload is None:
             return jsonify({"exists": False, "last_updated": None, "needs_refresh": True})
@@ -164,22 +171,54 @@ def create_app() -> Flask:
     def login() -> Any:
         credentials = _parse_credentials(request.get_json(silent=True))
         app.logger.info("Received login request for identifier %s", credentials.email_or_username)
-        payload = _fetch_payload(credentials)
+        known = passwords.check(credentials.email_or_username, credentials.password)
+        if known is False:
+            raise AuthError("Invalid Hevy credentials")
+        if known is None:
+            cached = load_payload(os.getenv("HEVY_DATA_FILE", str(DEFAULT_DATA_FILE)))
+            cached_account = (cached or {}).get("account") or {}
+            identifiers = {str(cached_account.get(key) or "").strip().casefold() for key in ("username", "email")}
+            if cached is not None and cached.get("last_updated") is not None and credentials.email_or_username.strip().casefold() in identifiers:
+                # First sign-in against data already on this machine: accept it once, then
+                # remember the password so every later sign-in is verified.
+                payload = cached
+            else:
+                try:
+                    payload = _refresh_payload(credentials)
+                except RuntimeError as error:
+                    if re.search(r"login request \(HTTP (400|401|403)\)", str(error)):
+                        raise AuthError("Invalid Hevy credentials") from error
+                    raise
+            account = payload["account"]
+            passwords.remember(
+                [credentials.email_or_username, account.get("username"), account.get("email")],
+                credentials.password,
+            )
+        else:
+            payload = _fetch_payload(credentials)
         account = payload["account"]
         return jsonify(
             {
+                "token": sessions.create(credentials),
                 "user": {
                     "username": account.get("username"),
                     "email": account.get("email"),
-                }
+                },
             }
         )
+
+    @app.post("/api/auth/logout")
+    def logout() -> Any:
+        header = request.headers.get("Authorization", "")
+        if header.startswith("Bearer "):
+            sessions.revoke(header[len("Bearer "):])
+        return jsonify({"status": "signed_out"})
 
     @app.post("/api/data-refresh")
     @sleep_and_retry
     @limits(calls=5, period=60)
     def data_refresh() -> Any:
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _refresh_payload(credentials)
         return jsonify(
             {
@@ -191,20 +230,26 @@ def create_app() -> Flask:
 
     @app.post("/api/exercises")
     def exercises() -> Any:
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         entries = parse_hevy_login_data(payload)
         return jsonify({"exercises": list_exercises(entries)})
 
     @app.post("/api/workouts")
     def workouts() -> Any:
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         return jsonify({"workouts": list_workouts(payload)})
 
+    @app.post("/api/prs")
+    def prs() -> Any:
+        credentials = session_credentials()
+        payload = _fetch_payload(credentials)
+        return jsonify(list_prs(payload))
+
     @app.post("/api/routines")
     def routines() -> Any:
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         if "routines" not in payload:
             payload = _refresh_payload(credentials)
@@ -212,7 +257,7 @@ def create_app() -> Flask:
 
     @app.post("/api/routines/<path:routine_id>/analytics")
     def routine_analytics(routine_id: str) -> Any:
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         analytics = aggregate_routine_metrics(payload, unquote(routine_id))
         return jsonify(analytics)
@@ -221,7 +266,7 @@ def create_app() -> Flask:
     def routine_analytics_all() -> Any:
         if request.method == "OPTIONS":
             return ("", 204)
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         summaries = list_routines(payload)
         analytics = {
@@ -241,7 +286,7 @@ def create_app() -> Flask:
                 }
             ), 404
 
-        credentials = _parse_credentials(request.get_json(silent=True))
+        credentials = session_credentials()
         payload = _fetch_payload(credentials)
         entries = parse_hevy_login_data(payload)
         normalized_name = unquote(exercise_name)
@@ -254,6 +299,10 @@ def create_app() -> Flask:
                 "points": points,
             }
         )
+
+    @app.errorhandler(AuthError)
+    def handle_auth_error(error: AuthError) -> Any:
+        return jsonify({"error": str(error)}), 401
 
     @app.errorhandler(ValueError)
     def handle_value_error(error: ValueError) -> Any:

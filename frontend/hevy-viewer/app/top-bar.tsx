@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { clearCachedCredentials } from "./exercises/auth-cache";
+import { logoutFromBackend } from "./exercises/api";
+import { clearCachedCredentials, readCachedCredentials } from "./exercises/auth-cache";
 
 const LINKS = [
   { href: "/routines", label: "Routines" },
   { href: "/exercises", label: "Exercises" },
+  { href: "/prs", label: "Records" },
   { href: "/calendar", label: "Calendar" },
   { href: "/settings", label: "Settings" },
 ];
@@ -16,7 +18,9 @@ export function TopBar() {
   const router = useRouter();
 
   function logout(): void {
+    const session = readCachedCredentials();
     clearCachedCredentials();
+    if (session) void logoutFromBackend(session);
     router.push("/login");
   }
 

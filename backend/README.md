@@ -61,9 +61,31 @@ Routine synchronization is optional. If Hevy rejects the routines endpoint
 with HTTP 401 for a free-account token, login and workout synchronization still
 complete and cached routines are preserved.
 
-Routine analytics also return a normalized performance comparison between the
-latest comparable session and a previous session. It uses weighted muscle-group
-overlap, recorded RPE when available (otherwise a rep-based effort estimate),
-and muscle-weighted stimulus per effort. Comparisons are withheld when the
-sessions do not have enough similarity or usable data, and include a confidence
-level plus the underlying overlap and effort changes.
+Every session in the routine analytics carries a comparison with the previous session
+(`vs_previous`) and with the average of the previous four (`vs_rolling`). Comparisons are by
+primary muscle group: a lift done in both sessions is compared directly on best-set estimated
+1RM (best reps for bodyweight lifts); a different lift for the same muscle is compared on best
+set for that muscle and marked `swapped`. The headline change is the mean across muscle groups,
+so doing fewer sets is not penalised. A comparison is withheld (`insufficient_similarity`) when
+fewer than half of the session's muscle groups appear in the baseline. Warm-up sets are ignored.
+
+`POST /api/workouts` lists every workout (including ones outside a routine) and `POST /api/prs`
+returns the personal records Hevy flagged on sets, each with its change over the previous record.
+
+## Sign-in and sessions
+
+`POST /api/auth/login` returns a random session token; every other endpoint needs
+`Authorization: Bearer <token>`. The browser keeps only the token. Your Hevy password is held
+in server memory (needed to refresh data) and, once verified, as a salted scrypt hash in
+`backend/.auth.json` (mode 600, git-ignored), so later sign-ins are checked without calling Hevy.
+Restarting the backend signs everyone out; sign in again.
+
+If `hevy_data.json` already exists and the identifier matches its account, the first sign-in
+is accepted and that password is remembered. Type your real password the first time.
+
+## Tests
+
+```
+pip install -r requirements-dev.txt
+python -m pytest
+```

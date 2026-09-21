@@ -8,12 +8,18 @@ export type ExerciseSummary = {
   total_volume_kg: number;
 };
 
-export type HevyCredentials = {
+export type LoginInput = {
   email_or_username: string;
   password: string;
 };
 
+/** What the browser keeps after signing in: a session token, never the password. */
+export type HevyCredentials = {
+  token: string;
+};
+
 export type LoginResponse = {
+  token: string;
   user: {
     username: string | null;
     email: string | null;
@@ -164,4 +170,37 @@ export type WorkoutSummary = {
   volume_kg: number;
   set_count: number;
   duration_min: number | null;
+};
+
+export type PrType = "best_1rm" | "best_weight" | "best_volume" | "best_reps";
+
+export type PersonalRecord = {
+  workout_id: string;
+  time: string;
+  workout_name: string;
+  routine_id: string | null;
+  exercise: string;
+  muscle_group: string;
+  image_url: string | null;
+  type: PrType;
+  value: number;
+  weight_kg: number;
+  reps: number;
+  set_index: number;
+  previous_value: number | null;
+  change_pct: number | null;
+  is_first: boolean;
+};
+
+export type ExerciseRecord = {
+  exercise: string;
+  muscle_group: string;
+  image_url: string | null;
+  last_pr_time: string;
+  bests: Partial<Record<PrType, { value: number; time: string; weight_kg: number; reps: number }>>;
+};
+
+export type PrResponse = {
+  prs: PersonalRecord[];
+  records: ExerciseRecord[];
 };

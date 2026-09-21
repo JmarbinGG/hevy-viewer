@@ -19,6 +19,7 @@ import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
 import { ChangeBar } from "../change-bar";
 import { TopBar } from "../top-bar";
+import { ErrorNotice } from "../error-notice";
 import { pct, shortDate, tone } from "../format";
 
 function formatChartDate(value: number): string {
@@ -139,7 +140,7 @@ export default function RoutinesPage() {
     <div className="app-shell min-h-screen">
       <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-12 px-6 py-6 md:px-12 xl:px-16">
         <TopBar />
-        {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
+        {error ? <ErrorNotice message={error} /> : null}
         {loading ? <p className="text-sm text-[var(--muted)]">Loading routines...</p> : routines.length === 0 ? <p className="text-sm text-[var(--muted)]">No routines found.</p> : <>
           <div className="-mb-6 flex gap-6 overflow-x-auto border-b border-[var(--border)]" role="tablist">
             {routines.map((routine) => (

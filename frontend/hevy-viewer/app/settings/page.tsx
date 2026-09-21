@@ -1,16 +1,26 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { applyTheme, readSettings, saveSettings, ViewerSettings } from "../settings";
+import { applyTheme, DEFAULT_SETTINGS, readSettings, saveSettings, ViewerSettings } from "../settings";
 import { TopBar } from "../top-bar";
 
 export default function SettingsPage() {
-  const [settings, setSettings] = useState<ViewerSettings>(() => readSettings());
+  // Start from the defaults so the server and browser render the same first frame,
+  // then load the saved settings.
+  const [settings, setSettings] = useState<ViewerSettings>(DEFAULT_SETTINGS);
+  const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    applyTheme(settings.colorTheme);
-  }, [settings.colorTheme]);
+    void Promise.resolve().then(() => {
+      setSettings(readSettings());
+      setLoaded(true);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (loaded) applyTheme(settings.colorTheme);
+  }, [loaded, settings.colorTheme]);
 
   function updateSettings(next: Partial<ViewerSettings>): void {
     const updated = { ...settings, ...next };

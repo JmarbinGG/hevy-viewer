@@ -19,13 +19,12 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const credentials = {
+      const result = await loginWithHevy({
         email_or_username: emailOrUsername.trim(),
         password,
-      };
-      await loginWithHevy(credentials);
-      cacheCredentials(credentials);
-      router.push("/exercises");
+      });
+      cacheCredentials({ token: result.token });
+      router.push("/");
     } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : "Login failed");
     } finally {
@@ -40,8 +39,8 @@ export default function LoginPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Hevy Viewer</p>
           <h1 className="text-3xl font-semibold tracking-tight">Sign in</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
-            Enter your Hevy email/username and password. Credentials are cached in this browser for easier
-            future fetches.
+            Enter your Hevy email/username and password. The password goes to your local backend only; this
+            browser keeps a session token, not the password.
           </p>
         </header>
 
