@@ -7,7 +7,7 @@ export type StripItem = { id: string; time: string | number; change: number | nu
 const BAR_CAP_PCT = 30;
 const STRIP_SESSIONS = 40;
 
-export function FormStrip({ items, selectedId, onSelect, compact = false }: { items: StripItem[]; selectedId: string | null; onSelect: (id: string) => void; compact?: boolean }) {
+export function FormStrip({ items, selectedId, onSelect, compact = false, baselineIds }: { items: StripItem[]; selectedId: string | null; onSelect: (id: string) => void; compact?: boolean; baselineIds?: string[] }) {
   const visible = items.slice(-STRIP_SESSIONS);
   return (
     <div className="overflow-x-auto pb-1" role="listbox" aria-label="Sessions">
@@ -15,12 +15,13 @@ export function FormStrip({ items, selectedId, onSelect, compact = false }: { it
         {visible.map((item) => {
           const change = item.change;
           const selected = item.id === selectedId;
+          const inBaseline = !selected && Boolean(baselineIds?.includes(item.id));
           const height = change === null || change === undefined ? 0 : Math.max(3, (Math.min(Math.abs(change), BAR_CAP_PCT) / BAR_CAP_PCT) * (compact ? 34 : 48));
           return (
             <button key={item.id} type="button" role="option" aria-selected={selected}
               onClick={() => onSelect(item.id)}
               title={`${shortDate(item.time)} · ${pct(change)}`}
-              className={`relative h-full min-w-3.5 flex-1 ${selected ? "bg-[var(--surface)] outline outline-1 outline-[var(--accent)]" : "hover:bg-[var(--surface)]"}`}>
+              className={`relative h-full min-w-3.5 flex-1 ${selected ? "bg-[var(--surface)] outline outline-1 -outline-offset-1 outline-[var(--accent)]" : inBaseline ? "bg-[color-mix(in_oklch,var(--accent)_10%,transparent)] outline outline-1 -outline-offset-1 outline-dotted outline-[var(--accent)]" : "hover:bg-[var(--surface)]"}`}>
               <span className="absolute left-0 right-0 top-1/2 h-px bg-[var(--border)]" />
               {height === 0
                 ? <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--muted)] opacity-60" />

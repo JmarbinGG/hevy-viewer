@@ -114,6 +114,12 @@ export default function RoutinesPage() {
   const factor = unit === "lb" ? 2.20462 : 1;
   const session = points.find((point) => point.workout_id === sessionId) ?? points[points.length - 1] ?? null;
   const baseline = session ? (mode === "previous" ? session.vs_previous : session.vs_rolling) : undefined;
+  const baselineIds = useMemo(() => {
+    if (mode !== "rolling" || !session || !analytics) return [];
+    const all = analytics.comparison_points;
+    const at = all.findIndex((point) => point.workout_id === session.workout_id);
+    return all.slice(Math.max(0, at - ROLLING_WINDOW), Math.max(0, at)).map((point) => point.workout_id);
+  }, [mode, session, analytics]);
   const chartPoints = useMemo(() => {
     const scored = points.filter((point) => point.performance_index && Number.isFinite(new Date(point.time).getTime()));
     return scored.map((point, index) => {
@@ -172,7 +178,7 @@ export default function RoutinesPage() {
               </div>
             </section>
 
-            <FormStrip items={points.map((point) => ({ id: point.workout_id, time: point.time, change: point.change_vs_previous_pct }))} selectedId={session.workout_id} onSelect={setSessionId} />
+            <FormStrip baselineIds={baselineIds} items={points.map((point) => ({ id: point.workout_id, time: point.time, change: point.change_vs_previous_pct }))} selectedId={session.workout_id} onSelect={setSessionId} />
 
             <section>
               <h3 className="text-lg font-semibold">Trend</h3>
