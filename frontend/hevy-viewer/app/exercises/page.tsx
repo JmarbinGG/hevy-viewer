@@ -5,11 +5,30 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clearCachedCredentials, readCachedCredentials } from "./auth-cache";
 import { fetchDataStatus, fetchExerciseGraph, fetchExercises, refreshData } from "./api";
-import { EXERCISE_GRAPHS, GraphPoint } from "./graphs";
+import { EXERCISE_GRAPHS, GraphPoint, toTimeSeries } from "./graphs";
 import { DataStatus, ExerciseSummary, HevyCredentials } from "./types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
+import { FormStrip } from "../form-strip";
+import { pct, shortDate, tone } from "../format";
+
+const METRIC_NAMES: Record<string, string> = {
+  volume_over_time: "volume",
+  max_over_time: "top set",
+  one_rep_max: "estimated 1RM",
+};
 
 type GraphPointsById = Record<string, GraphPoint[]>;
+
+function ExerciseImage({ url, className }: { url: string | null; className: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return <div className={`${className} shrink-0 bg-[var(--surface)]`} aria-hidden />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className={`${className} shrink-0 bg-white object-contain`} />
+  );
+}
 
 export default function ExercisesPage() {
   const router = useRouter();
@@ -25,6 +44,8 @@ export default function ExercisesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGraphId, setSelectedGraphId] = useState(EXERCISE_GRAPHS[0]?.id ?? "");
   const [settings, setSettings] = useState<ViewerSettings>(readSettings);
+  const [query, setQuery] = useState("");
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     applyTheme(settings.colorTheme);
@@ -155,6 +176,38 @@ export default function ExercisesPage() {
     [exercises],
   );
 
+  const visibleExercises = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return needle ? sortedExercises.filter((exercise) => exercise.name.toLowerCase().includes(needle) || exercise.muscle_groups.some((group) => group.toLowerCase().includes(needle))) : sortedExercises;
+  }, [sortedExercises, query]);
+  const graph = EXERCISE_GRAPHS.find((item) => item.id === selectedGraphId);
+  const factor = settings.unitSystem === "lb" ? 2.20462 : 1;
+  const unit = settings.unitSystem;
+  const series = useMemo(() => {
+    if (!graph) return [];
+    const filtered = (graphs[graph.id] ?? []).filter((point) => !settings.startDate || point.time.slice(0, 10) >= settings.startDate);
+    return toTimeSeries(filtered, graph.valueKey);
+  }, [graph, graphs, settings.startDate]);
+  const stripItems = useMemo(() => series.map((point, index) => ({
+    id: point.workout_id,
+    time: point.timestamp,
+    change: index > 0 && series[index - 1].value > 0 ? (point.value / series[index - 1].value - 1) * 100 : null,
+  })), [series]);
+  const sessionIndex = Math.max(0, series.findIndex((point) => point.workout_id === sessionId));
+  const activeIndex = sessionId && series.some((point) => point.workout_id === sessionId) ? sessionIndex : series.length - 1;
+  const session = series[activeIndex] ?? null;
+  const change = stripItems[activeIndex]?.change ?? null;
+  const best = series.reduce<(typeof series)[number] | null>((top, point) => (!top || point.value > top.value ? point : top), null);
+  const metricName = METRIC_NAMES[selectedGraphId] ?? "value";
+  const headline = !selected || loadingGraph ? "" : !session
+    ? `No ${metricName} recorded yet.`
+    : change === null
+      ? `${shortDate(session.timestamp)} is the first recorded session.`
+      : Math.abs(change) < 2
+        ? `${shortDate(session.timestamp)}: ${metricName} held steady on the session before.`
+        : `${shortDate(session.timestamp)}: ${metricName} ${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% on the session before.`;
+  const weight = (value: number) => (value * factor).toFixed(1);
+
   function logout(): void {
     clearCachedCredentials();
     credentialsRef.current = null;
@@ -186,108 +239,74 @@ export default function ExercisesPage() {
       <div className="app-shell min-h-screen">
         <main className="mx-auto flex w-full max-w-xl flex-col gap-6 px-6 py-16">
           <h1 className="text-3xl font-semibold tracking-tight">Exercises</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-300">
-            You need to sign in before we can fetch your Hevy exercise data.
-          </p>
-          <Link
-            href="/login"
-            className="control-button"
-          >
-            Go to login
-          </Link>
+          <p className="text-sm text-[var(--muted)]">Sign in to fetch your Hevy exercise data.</p>
+          <Link href="/login" className="control-button">Go to login</Link>
         </main>
       </div>
     );
   }
 
   return (
-    <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-10 md:px-10">
-        <header className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-300 pb-6 dark:border-zinc-800">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Hevy Viewer</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Exercises</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link
-              href="/settings"
-              className="control-button"
-            >
-              Settings
-            </Link>
+    <div className="app-shell min-h-screen md:h-dvh md:overflow-hidden">
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-6 px-6 py-5 md:h-full md:px-12 xl:px-16">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-lg font-semibold tracking-tight">Exercises</h1>
+          <nav className="flex flex-wrap gap-3">
             <Link href="/routines" className="control-button">Routines</Link>
-            <Link
-              href="/"
-              className="control-button"
-            >
-              Home
-            </Link>
-            <button
-              type="button"
-              onClick={logout}
-              className="control-button"
-            >
-              Log out
-            </button>
-          </div>
+            <Link href="/settings" className="control-button">Settings</Link>
+            <Link href="/" className="control-button">Home</Link>
+            <button type="button" onClick={logout} className="control-button">Log out</button>
+          </nav>
         </header>
 
-        {error ? (
-          <div className="border border-red-500/60 bg-red-500/5 px-4 py-3 text-sm text-red-600 dark:text-red-300">
-            {error}
-          </div>
-        ) : null}
+        {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
 
         {dataStatus?.needs_refresh ? (
-          <div className="flex flex-wrap items-center justify-between gap-4 border border-amber-500/50 bg-amber-500/5 px-4 py-3 text-sm">
-            <p>
-              Workout data was last updated {dataStatus.last_updated ?? "never"}. Refresh today&apos;s data?
-            </p>
-            <button
-              type="button"
-              onClick={() => void handleRefresh()}
-              disabled={refreshing}
-              className="control-button text-xs uppercase disabled:cursor-wait disabled:opacity-50"
-            >
+          <div className="flex flex-wrap items-center justify-between gap-4 border-l-2 border-[var(--accent)] pl-4 text-sm">
+            <p>Workout data was last updated {dataStatus.last_updated ?? "never"}. Refresh today&apos;s data?</p>
+            <button type="button" onClick={() => void handleRefresh()} disabled={refreshing} className="control-button disabled:cursor-wait disabled:opacity-50">
               {refreshing ? "Refreshing..." : "Refresh"}
             </button>
           </div>
         ) : null}
 
-        <section className="grid gap-8 md:grid-cols-[300px_1fr]">
-          <aside className="space-y-3">
-            <h2 className="text-sm font-medium uppercase tracking-[0.16em] text-zinc-500">Exercise list</h2>
-            <div className="max-h-[65vh] overflow-y-auto border border-zinc-300 dark:border-zinc-800">
+        <div className="grid gap-10 md:min-h-0 md:flex-1 md:grid-cols-[16rem_minmax(0,1fr)]">
+          <aside className="md:flex md:min-h-0 md:flex-col">
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search exercises"
+              aria-label="Search exercises"
+              className="control-input w-full"
+            />
+            <div className="mt-3 max-h-[60vh] overflow-y-auto md:max-h-none md:min-h-0 md:flex-1">
               {loadingExercises ? (
-                <p className="px-4 py-3 text-sm text-zinc-500">Loading exercises...</p>
-              ) : exercises.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-zinc-500">No exercises found.</p>
+                <p className="py-3 text-sm text-[var(--muted)]">Loading exercises...</p>
+              ) : visibleExercises.length === 0 ? (
+                <p className="py-3 text-sm text-[var(--muted)]">{exercises.length === 0 ? "No exercises found." : "No matches."}</p>
               ) : (
                 <ul>
-                  {sortedExercises.map((exercise) => {
+                  {visibleExercises.map((exercise) => {
                     const isActive = selectedExercise === exercise.name;
                     return (
-                      <li key={exercise.id} className="border-b border-zinc-200 last:border-b-0 dark:border-zinc-800">
+                      <li key={exercise.id}>
                         <button
                           type="button"
                           onClick={() => {
-                            if (exercise.name === selectedExercise) {
-                              return;
-                            }
+                            if (exercise.name === selectedExercise) return;
                             setError(null);
                             setLoadingGraph(true);
+                            setSessionId(null);
                             setSelectedExercise(exercise.name);
                           }}
-                          className={`w-full px-4 py-3 text-left transition-colors ${
-                            isActive
-                              ? "exercise-active"
-                              : "exercise-option"
-                          }`}
+                          className={`flex w-full items-center gap-3 border-l-2 px-3 py-2 text-left ${isActive ? "border-[var(--accent)] bg-[var(--surface)]" : "border-transparent hover:bg-[var(--surface)]"}`}
                         >
-                          <p className="text-sm font-medium">{exercise.name}</p>
-                          <p className="mt-1 text-xs opacity-75">
-                            {exercise.muscle_groups.join(" • ")} · {exercise.workout_count} workouts
-                          </p>
+                          <ExerciseImage url={exercise.image_url} className="size-10" />
+                          <span className="min-w-0">
+                            <span className={`block truncate text-sm ${isActive ? "font-semibold" : ""}`}>{exercise.name}</span>
+                            <span className="block truncate text-xs text-[var(--muted)]">{exercise.muscle_groups.join(", ")} · {exercise.workout_count}</span>
+                          </span>
                         </button>
                       </li>
                     );
@@ -297,67 +316,73 @@ export default function ExercisesPage() {
             </div>
           </aside>
 
-          <section className="space-y-6">
+          <div className="flex min-h-0 min-w-0 flex-col gap-6">
             {!selected ? (
-              <div className="border border-zinc-300 px-5 py-4 text-sm text-zinc-500 dark:border-zinc-800">
-                Select an exercise to view graphs.
-              </div>
+              <p className="text-sm text-[var(--muted)]">{loadingExercises ? "" : "Select an exercise."}</p>
             ) : (
               <>
-                <div className="border border-zinc-300 p-5 dark:border-zinc-800">
-                  <h2 className="text-2xl font-semibold tracking-tight">{selected.name}</h2>
-                  <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-                    {(Math.round(selected.total_volume_kg * (settings.unitSystem === "lb" ? 2.20462 : 1) * 10) / 10).toFixed(1)} {settings.unitSystem} total volume · {selected.set_count} sets
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-200 pb-4 dark:border-zinc-800">
-                  <div>
-                    <h3 className="text-lg font-semibold">Progress graph</h3>
-                    <p className="mt-1 text-sm text-zinc-500">Choose a metric to compare across sessions.</p>
+                <section>
+                  <div className="flex min-w-0 items-center gap-5">
+                    <ExerciseImage key={selected.id} url={selected.image_url} className="size-20" />
+                    <h2 className="line-clamp-2 min-h-[2lh] min-w-0 text-3xl font-semibold leading-tight tracking-tight">{selected.name}</h2>
                   </div>
-                  <label className="flex items-center gap-3 text-sm">
-                    <span className="text-zinc-500">Metric</span>
-                    <select
-                      value={selectedGraphId}
-                      onChange={(event) => {
+                  <p className="mt-2 min-h-[2lh] max-w-[52ch] text-lg text-[var(--muted)]">{headline}</p>
+                  <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm tabular-nums">
+                      <div>
+                        <dt className="text-[var(--muted)]">{metricName === "estimated 1RM" ? "Est. 1RM" : metricName === "top set" ? "Top set" : "Volume"}</dt>
+                        <dd className="text-2xl font-semibold">{session ? weight(session.value) : "—"} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd>
+                        <dd className={`h-5 ${tone(change)}`}>{pct(change)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Best</dt>
+                        <dd className="text-2xl font-semibold">{best ? weight(best.value) : "—"} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd>
+                        <dd className="h-5 text-[var(--muted)]">{best ? shortDate(best.timestamp) : ""}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Sessions</dt>
+                        <dd className="text-2xl font-semibold">{selected.workout_count}</dd>
+                        <dd className="h-5 text-[var(--muted)]">{selected.set_count} sets</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Total volume</dt>
+                        <dd className="text-2xl font-semibold">{Math.round(selected.total_volume_kg * factor).toLocaleString()} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd>
+                        <dd className="h-5" />
+                      </div>
+                    </dl>
+                </section>
+
+                  <div className="segmented-control w-fit" role="group" aria-label="Metric">
+                  {EXERCISE_GRAPHS.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={item.id === selectedGraphId ? "segment-active" : "segment"}
+                      onClick={() => {
+                        if (item.id === selectedGraphId) return;
                         setLoadingGraph(true);
-                        setSelectedGraphId(event.target.value);
+                        setSelectedGraphId(item.id);
                       }}
-                      className="border border-zinc-300 bg-transparent px-3 py-2 dark:border-zinc-700"
                     >
-                      {EXERCISE_GRAPHS.map((graph) => (
-                        <option key={graph.id} value={graph.id}>
-                          {graph.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
 
-                {loadingGraph ? (
-                  <div className="border border-zinc-300 px-5 py-4 text-sm text-zinc-500 dark:border-zinc-800">
-                    Loading graphs...
+                <FormStrip compact items={stripItems} selectedId={session?.workout_id ?? null} onSelect={setSessionId} />
+
+                <section className="relative min-h-64 flex-1">
+                  <div className="absolute inset-0">
+                    {loadingGraph ? <p className="text-sm text-[var(--muted)]">Loading...</p> : graph ? graph.render({
+                      points: (graphs[graph.id] ?? []).filter((point) => !settings.startDate || point.time.slice(0, 10) >= settings.startDate),
+                      unitSystem: unit,
+                      highlight: session?.timestamp,
+                    }) : null}
                   </div>
-                ) : (
-                  (() => {
-                    const graph = EXERCISE_GRAPHS.find((item) => item.id === selectedGraphId);
-                    const filteredPoints = (graphs[graph?.id ?? ""] ?? []).filter((point) =>
-                      !settings.startDate || point.time.slice(0, 10) >= settings.startDate,
-                    );
-                    return graph ? (
-                      <article className="border border-zinc-300 p-5 dark:border-zinc-800">
-                        <h3 className="text-lg font-semibold">{graph.title}</h3>
-                        <p className="mt-1 mb-4 text-sm text-zinc-500">{graph.description}</p>
-                        {graph.render({ points: filteredPoints, unitSystem: settings.unitSystem })}
-                      </article>
-                    ) : null;
-                  })()
-                )}
+                </section>
               </>
             )}
-          </section>
-        </section>
+          </div>
+        </div>
       </main>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -18,6 +19,7 @@ export type GraphPoint = VolumePoint | MaxWeightPoint | OneRepMaxPoint;
 type GraphRendererProps = {
   points: GraphPoint[];
   unitSystem?: UnitSystem;
+  highlight?: number;
 };
 
 export type GraphConfig = {
@@ -30,13 +32,13 @@ export type GraphConfig = {
   render: (props: GraphRendererProps) => ReactNode;
 };
 
-type TimeSeriesPoint = {
+export type TimeSeriesPoint = {
   workout_id: string;
   timestamp: number;
   value: number;
 };
 
-function toTimeSeries(points: GraphPoint[], valueKey: GraphConfig["valueKey"]): TimeSeriesPoint[] {
+export function toTimeSeries(points: GraphPoint[], valueKey: GraphConfig["valueKey"]): TimeSeriesPoint[] {
   return points
     .map((point) => ({
       workout_id: point.workout_id,
@@ -64,17 +66,17 @@ function formatWeight(value: number, unit: string): string {
   return `${rounded.toFixed(1)} ${unit}`;
 }
 
-function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { config: GraphConfig }): ReactNode {
+function Graph({ points, config, unitSystem = "kg", highlight }: GraphRendererProps & { config: GraphConfig }): ReactNode {
   const data = toTimeSeries(points, config.valueKey);
   const multiplier = unitSystem === "lb" ? 2.20462 : 1;
   const unit = unitSystem === "lb" ? "lb" : "kg";
   const displayData = data.map((point) => ({ ...point, value: point.value * multiplier }));
   if (data.length === 0) {
-    return <p className="text-sm text-zinc-500">No {config.label.toLowerCase()} data available yet.</p>;
+    return <p className="text-sm text-[var(--muted)]">No {config.label.toLowerCase()} data available yet.</p>;
   }
 
   return (
-    <div className="h-80 w-full">
+    <div className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={displayData} margin={{ top: 20, right: 20, left: 12, bottom: 12 }}>
           <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 2" />
@@ -108,6 +110,7 @@ function Graph({ points, config, unitSystem = "kg" }: GraphRendererProps & { con
             itemStyle={{ color: "var(--tooltip-text)" }}
             labelStyle={{ color: "var(--tooltip-text)" }}
           />
+          {highlight ? <ReferenceLine x={highlight} stroke="var(--accent)" strokeDasharray="3 3" /> : null}
           <Line
             type="monotone"
             dataKey="value"

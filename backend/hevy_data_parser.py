@@ -38,6 +38,7 @@ def parse_hevy_login_data(payload: Mapping[str, Any]) -> list[ParsedEntry]:
 
             exercise_name = _exercise_name(exercise)
             muscle_group = _muscle_group(exercise)
+            image_url = exercise.get("custom_exercise_image_url") or exercise.get("thumbnail_url")
             sets = exercise.get("sets")
 
             if not isinstance(sets, list) or not sets:
@@ -49,6 +50,7 @@ def parse_hevy_login_data(payload: Mapping[str, Any]) -> list[ParsedEntry]:
                         "workout_start": _workout_start(workout.get("start_time")),
                         "exercise": exercise_name,
                         "muscle_group": muscle_group,
+                        "image_url": image_url,
                     }
                 )
                 continue
@@ -65,6 +67,7 @@ def parse_hevy_login_data(payload: Mapping[str, Any]) -> list[ParsedEntry]:
                         "workout_start": _workout_start(workout.get("start_time")),
                         "exercise": exercise_name,
                         "muscle_group": muscle_group,
+                        "image_url": image_url,
                         "set_index": idx,
                         "set_type": set_data.get("type"),
                         "reps": set_data.get("reps"),
@@ -177,6 +180,7 @@ def list_exercises(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]
                 "id": _to_key(exercise),
                 "name": exercise,
                 "muscle_groups": set(),
+                "image_url": None,
                 "workout_ids": set(),
                 "set_count": 0,
                 "total_volume_kg": 0.0,
@@ -184,6 +188,8 @@ def list_exercises(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]
 
         current = by_name[exercise]
         current["muscle_groups"].add(muscle_group)
+        if not current["image_url"] and isinstance(entry.get("image_url"), str):
+            current["image_url"] = entry["image_url"]
         if entry.get("set_index") is not None:
             current["set_count"] += 1
         current["total_volume_kg"] += volume
@@ -197,6 +203,7 @@ def list_exercises(entries: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]
                 "id": value["id"],
                 "name": value["name"],
                 "muscle_groups": sorted(value["muscle_groups"]),
+                "image_url": value["image_url"],
                 "workout_count": len(value["workout_ids"]),
                 "set_count": value["set_count"],
                 "total_volume_kg": round(float(value["total_volume_kg"]), 2),

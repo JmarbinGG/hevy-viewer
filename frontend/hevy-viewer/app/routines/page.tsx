@@ -14,8 +14,10 @@ import {
 } from "recharts";
 import { readCachedCredentials } from "../exercises/auth-cache";
 import { fetchAllRoutineAnalytics, fetchRoutines } from "../exercises/api";
-import { RoutineAnalytics, RoutineSummary, HevyCredentials, RoutineComparisonPoint, SessionBaselineComparison } from "../exercises/types";
+import { RoutineAnalytics, RoutineSummary, HevyCredentials, SessionBaselineComparison } from "../exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
+import { FormStrip } from "../form-strip";
+import { pct, shortDate, tone, toneVar } from "../format";
 
 function formatChartDate(value: number): string {
   return new Date(value).toLocaleDateString(undefined, {
@@ -27,32 +29,12 @@ function formatChartDate(value: number): string {
 
 const ROLLING_WINDOW = 4;
 const BAR_CAP_PCT = 30;
-const STRIP_SESSIONS = 40;
 
 type Mode = "previous" | "rolling";
-
-function pct(value: number | null | undefined, digits = 1): string {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(digits)}%`;
-}
-
-function tone(value: number | null | undefined): string {
-  if (value === null || value === undefined || Math.abs(value) < 2) return "text-[var(--muted)]";
-  return value > 0 ? "text-[var(--gain)]" : "text-[var(--loss)]";
-}
-
-function toneVar(value: number | null | undefined): string {
-  if (value === null || value === undefined || Math.abs(value) < 2) return "var(--muted)";
-  return value > 0 ? "var(--gain)" : "var(--loss)";
-}
 
 function formatStrength(value: number, metric: "1rm" | "reps", unit: "kg" | "lb"): string {
   if (metric === "reps") return `${Math.round(value)} reps`;
   return `${(value * (unit === "lb" ? 2.20462 : 1)).toFixed(1)} ${unit}`;
-}
-
-function shortDate(time: string): string {
-  return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function headline(title: string, time: string, baseline: SessionBaselineComparison | undefined, mode: Mode): string {
@@ -66,36 +48,6 @@ function headline(title: string, time: string, baseline: SessionBaselineComparis
   const change = baseline.performance_change_pct ?? 0;
   if (baseline.status === "similar") return `${title} on ${when} matched ${against}.`;
   return `${title} on ${when} was ${Math.abs(change).toFixed(0)}% ${change > 0 ? "stronger" : "weaker"} than ${against}.`;
-}
-
-function FormStrip({ points, selectedId, onSelect }: { points: RoutineComparisonPoint[]; selectedId: string | null; onSelect: (id: string) => void }) {
-  const visible = points.slice(-STRIP_SESSIONS);
-  return (
-    <div className="overflow-x-auto pb-1" role="listbox" aria-label="Sessions">
-      <div className="flex h-28 min-w-max items-center gap-1">
-        {visible.map((point) => {
-          const change = point.change_vs_previous_pct;
-          const selected = point.workout_id === selectedId;
-          const height = change === null || change === undefined ? 0 : Math.max(3, (Math.min(Math.abs(change), BAR_CAP_PCT) / BAR_CAP_PCT) * 48);
-          return (
-            <button key={point.workout_id} type="button" role="option" aria-selected={selected}
-              onClick={() => onSelect(point.workout_id)}
-              title={`${shortDate(point.time)} · ${pct(change)}`}
-              className={`relative h-full w-3.5 shrink-0 ${selected ? "bg-[var(--surface)] outline outline-1 outline-[var(--accent)]" : "hover:bg-[var(--surface)]"}`}>
-              <span className="absolute left-0 right-0 top-1/2 h-px bg-[var(--border)]" />
-              {height === 0
-                ? <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--muted)] opacity-60" />
-                : <span className="absolute left-[3px] right-[3px]" style={{ background: toneVar(change), height, ...(change! > 0 ? { bottom: "50%" } : { top: "50%" }) }} />}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-1 flex justify-between text-xs text-[var(--muted)]">
-        <span>{visible[0] ? shortDate(visible[0].time) : ""}</span>
-        <span>{visible.length ? shortDate(visible[visible.length - 1].time) : ""}</span>
-      </div>
-    </div>
-  );
 }
 
 function ChangeBar({ value }: { value: number }) {
@@ -188,7 +140,7 @@ export default function RoutinesPage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-6 py-8 md:px-10">
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-12 px-6 py-8 md:px-12 xl:px-16">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-lg font-semibold tracking-tight">Routines</h1>
           <nav className="flex gap-3"><Link href="/exercises" className="control-button">Exercises</Link><Link href="/settings" className="control-button">Settings</Link></nav>
@@ -220,7 +172,7 @@ export default function RoutinesPage() {
               </div>
             </section>
 
-            <FormStrip points={points} selectedId={session.workout_id} onSelect={setSessionId} />
+            <FormStrip items={points.map((point) => ({ id: point.workout_id, time: point.time, change: point.change_vs_previous_pct }))} selectedId={session.workout_id} onSelect={setSessionId} />
 
             <section>
               <h3 className="text-lg font-semibold">Trend</h3>

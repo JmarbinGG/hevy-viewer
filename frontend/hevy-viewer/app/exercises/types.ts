@@ -2,6 +2,7 @@ export type ExerciseSummary = {
   id: string;
   name: string;
   muscle_groups: string[];
+  image_url: string | null;
   workout_count: number;
   set_count: number;
   total_volume_kg: number;

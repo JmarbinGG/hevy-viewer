@@ -189,8 +189,6 @@ def create_app() -> Flask:
         )
 
     @app.post("/api/exercises")
-    @sleep_and_retry
-    @limits(calls=5,period=60)
     def exercises() -> Any:
         credentials = _parse_credentials(request.get_json(silent=True))
         payload = _fetch_payload(credentials)
@@ -198,8 +196,6 @@ def create_app() -> Flask:
         return jsonify({"exercises": list_exercises(entries)})
 
     @app.post("/api/routines")
-    @sleep_and_retry
-    @limits(calls=5, period=60)
     def routines() -> Any:
         credentials = _parse_credentials(request.get_json(silent=True))
         payload = _fetch_payload(credentials)
@@ -208,8 +204,6 @@ def create_app() -> Flask:
         return jsonify({"routines": list_routines(payload)})
 
     @app.post("/api/routines/<path:routine_id>/analytics")
-    @sleep_and_retry
-    @limits(calls=5, period=60)
     def routine_analytics(routine_id: str) -> Any:
         credentials = _parse_credentials(request.get_json(silent=True))
         payload = _fetch_payload(credentials)
@@ -217,8 +211,6 @@ def create_app() -> Flask:
         return jsonify(analytics)
 
     @app.route("/api/routines/analytics", methods=["POST", "OPTIONS"])
-    @sleep_and_retry
-    @limits(calls=5, period=60)
     def routine_analytics_all() -> Any:
         if request.method == "OPTIONS":
             return ("", 204)
@@ -232,8 +224,6 @@ def create_app() -> Flask:
         return jsonify({"analytics": analytics})
 
     @app.post("/api/exercises/<path:exercise_name>/graphs/<graph_name>")
-    @sleep_and_retry
-    @limits(calls=5,period=60)
     def exercise_graph(exercise_name: str, graph_name: str) -> Any:
         builder = GRAPH_BUILDERS.get(graph_name)
         if builder is None:
