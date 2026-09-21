@@ -47,11 +47,10 @@ function unavailableReason(baseline: SessionBaselineComparison): string {
   return "Not enough earlier sessions yet.";
 }
 
-function DeltaCard({ title, subtitle, baseline }: { title: string; subtitle: string; baseline?: SessionBaselineComparison }) {
+function DeltaCard({ title, baseline }: { title: string; baseline?: SessionBaselineComparison }) {
   return (
     <div className="border border-[var(--border)] p-5">
       <p className="eyebrow">{title}</p>
-      <p className="mt-1 text-xs text-[var(--muted)]">{subtitle}</p>
       {baseline?.available ? <>
         <p className={`mt-3 text-4xl font-semibold tracking-tight ${tone(baseline.performance_change_pct)}`}>{pct(baseline.performance_change_pct)}</p>
         <p className="mt-1 text-xs text-[var(--muted)]">{baseline.confidence} confidence · {baseline.muscle_overlap_pct?.toFixed(0)}% muscle overlap</p>
@@ -162,15 +161,13 @@ export default function RoutinesPage() {
                  <div className="border border-[var(--border)] p-5">
                    <p className="eyebrow">Latest session · {comparison.current ? new Date(comparison.current.time).toLocaleDateString() : ""}</p>
                    <h3 className="mt-2 text-xl font-semibold">{comparison.message}</h3>
-                   <p className="mt-2 text-sm text-[var(--muted)]">Scored on strength per exercise (best-set est. 1RM), so doing fewer sets is not penalised.</p>
                  </div>
                  <div className="grid gap-4 md:grid-cols-2">
-                   <DeltaCard title="vs previous session" subtitle="Same routine, last time" baseline={comparison.vs_previous} />
-                   <DeltaCard title={`vs last ${ROLLING_WINDOW} average`} subtitle="Smooths out one-off good/bad days" baseline={comparison.vs_rolling} />
+                   <DeltaCard title="vs previous session" baseline={comparison.vs_previous} />
+                   <DeltaCard title={`vs last ${ROLLING_WINDOW} average`} baseline={comparison.vs_rolling} />
                  </div>
                  {exerciseRows.length > 0 ? <div className="border border-[var(--border)] p-5">
                    <h3 className="text-lg font-semibold">Exercise breakdown</h3>
-                   <p className="mt-1 text-sm text-[var(--muted)]">{comparison.vs_previous?.available ? "Latest session vs previous session." : `Latest session vs ${ROLLING_WINDOW}-session average.`}</p>
                    <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm">
                      <thead className="text-xs uppercase tracking-wider text-[var(--muted)]"><tr><th className="pb-3">Exercise</th><th className="pb-3">Before</th><th className="pb-3">Now</th><th className="pb-3">Change</th><th className="pb-3">Sets</th></tr></thead>
                      <tbody>{exerciseRows.map((row) => <tr key={row.name} className="border-t border-[var(--border)]">
@@ -183,14 +180,12 @@ export default function RoutinesPage() {
                    {(headline?.added_exercises?.length || headline?.removed_exercises?.length) ? <p className="mt-4 text-xs text-[var(--muted)]">
                      {headline?.added_exercises?.length ? `New: ${headline.added_exercises.join(", ")}. ` : ""}{headline?.removed_exercises?.length ? `Skipped: ${headline.removed_exercises.join(", ")}.` : ""}
                    </p> : null}
-                   <p className="mt-2 text-xs text-[var(--muted)]">Est. 1RM uses the Epley formula on the best working set; bodyweight lifts use best reps.</p>
                  </div> : null}
                </> : null}
                <div className="border border-[var(--border)] p-5">
                   <div className="flex flex-wrap items-baseline justify-between gap-3">
                     <div>
                      <h3 className="text-lg font-semibold">{selected.title} trend</h3>
-                     <p className="mt-1 text-sm text-[var(--muted)]">Strength index per session (100 = first session) with {ROLLING_WINDOW}-session rolling average.</p>
                     </div>
                    <span className="text-xs text-[var(--muted)]">Higher is better</span>
                   </div>
@@ -222,7 +217,7 @@ export default function RoutinesPage() {
                   <td className="py-3 pr-3 text-[var(--muted)]">{Math.round(point.volume_kg * (unit === "lb" ? 2.20462 : 1)).toLocaleString()} {unit}</td>
                   <td className="py-3 pr-3 text-[var(--muted)]">{point.set_count ?? "—"}</td>
                   <td className="py-3 text-[var(--muted)]">{point.duration_min ? `${Math.round(point.duration_min)}m` : "—"}</td>
-                </tr>)}</tbody></table>{points.length === 0 ? <p className="pt-4 text-sm text-[var(--muted)]">No sessions match the selected start date.</p> : null}<p className="pt-4 text-xs text-[var(--muted)]">&ldquo;vs prev&rdquo; shows — when the previous session hit different muscles (under 70% overlap).</p></div></div>
+                </tr>)}</tbody></table>{points.length === 0 ? <p className="pt-4 text-sm text-[var(--muted)]">No sessions match the selected start date.</p> : null}</div></div>
               </> : null}
             </>}
           </section>
