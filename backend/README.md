@@ -13,6 +13,7 @@ and retry backoff for rate limits and transient server errors.
 - `POST /api/exercises`
 - `POST /api/exercises/<exercise_name>/graphs/volume_over_time`
 - `POST /api/routines`
+- `POST /api/routines/analytics`
 - `POST /api/routines/<routine_id>/analytics`
 
 ## Required environment variables
@@ -59,3 +60,10 @@ with one comparison point per workout.
 Routine synchronization is optional. If Hevy rejects the routines endpoint
 with HTTP 401 for a free-account token, login and workout synchronization still
 complete and cached routines are preserved.
+
+Routine analytics also return a normalized performance comparison between the
+latest comparable session and a previous session. It uses weighted muscle-group
+overlap, recorded RPE when available (otherwise a rep-based effort estimate),
+and muscle-weighted stimulus per effort. Comparisons are withheld when the
+sessions do not have enough similarity or usable data, and include a confidence
+level plus the underlying overlap and effort changes.

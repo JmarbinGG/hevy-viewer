@@ -95,3 +95,16 @@ export async function fetchRoutineAnalytics(
   });
   return parseJsonResponse<RoutineAnalytics>(response);
 }
+
+export async function fetchAllRoutineAnalytics(
+  credentials: HevyCredentials,
+): Promise<Record<string, RoutineAnalytics>> {
+  const response = await fetch(`${API_BASE_URL}/api/routines/analytics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+    cache: "no-store",
+  });
+  const data = await parseJsonResponse<{ analytics: Record<string, RoutineAnalytics> }>(response);
+  return data.analytics;
+}

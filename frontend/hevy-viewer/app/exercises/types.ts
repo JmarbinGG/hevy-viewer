@@ -60,11 +60,77 @@ export type RoutineSummary = {
   last_workout: string | null;
 };
 
+export type RoutineExerciseStats = {
+  name: string;
+  sets: number;
+  volume_kg: number;
+  top_weight_kg: number;
+  top_reps: number;
+  metric: "1rm" | "reps";
+  strength: number;
+};
+
 export type RoutineComparisonPoint = {
   workout_id: string;
   time: string;
   volume_kg: number;
   estimated_1rm_kg: number;
+  muscle_groups?: Record<string, number>;
+  effort_score?: number | null;
+  effort_source?: "recorded_rpe" | "estimated_from_reps" | "insufficient_data";
+  normalized_performance?: number;
+  performance_index?: number;
+  change_vs_previous_pct?: number | null;
+  set_count?: number;
+  duration_min?: number | null;
+  exercises?: RoutineExerciseStats[];
+};
+
+export type ExerciseComparisonRow = {
+  name: string;
+  metric: "1rm" | "reps";
+  current: number;
+  baseline: number;
+  change_pct: number;
+  current_sets: number;
+  baseline_sets: number;
+  current_volume_kg: number;
+  baseline_volume_kg: number;
+  current_top: [number, number];
+};
+
+export type SessionBaselineComparison = {
+  available: boolean;
+  reason?: "no_baseline" | "insufficient_similarity" | "no_shared_exercises";
+  status?: "improved" | "declined" | "similar";
+  sample_size: number;
+  performance_change_pct?: number;
+  confidence?: "high" | "medium" | "low";
+  muscle_overlap_pct?: number;
+  volume_change_pct?: number | null;
+  set_change_pct?: number | null;
+  duration_change_pct?: number | null;
+  baseline_time?: string;
+  exercises?: ExerciseComparisonRow[];
+  added_exercises?: string[];
+  removed_exercises?: string[];
+};
+
+export type RoutinePerformanceComparison = {
+  available: boolean;
+  status: "improved" | "declined" | "similar" | "insufficient_data" | "insufficient_similarity";
+  message: string;
+  confidence: "high" | "medium" | "low";
+  current?: {
+    workout_id: string;
+    time: string;
+    performance_index: number;
+    volume_kg: number;
+    set_count: number;
+    duration_min: number | null;
+  };
+  vs_previous?: SessionBaselineComparison;
+  vs_rolling?: SessionBaselineComparison;
 };
 
 export type RoutineAnalytics = {
@@ -73,4 +139,5 @@ export type RoutineAnalytics = {
   total_volume_kg: number;
   total_estimated_1rm_kg: number;
   comparison_points: RoutineComparisonPoint[];
+  performance_comparison?: RoutinePerformanceComparison;
 };

@@ -216,6 +216,21 @@ def create_app() -> Flask:
         analytics = aggregate_routine_metrics(payload, unquote(routine_id))
         return jsonify(analytics)
 
+    @app.route("/api/routines/analytics", methods=["POST", "OPTIONS"])
+    @sleep_and_retry
+    @limits(calls=5, period=60)
+    def routine_analytics_all() -> Any:
+        if request.method == "OPTIONS":
+            return ("", 204)
+        credentials = _parse_credentials(request.get_json(silent=True))
+        payload = _fetch_payload(credentials)
+        summaries = list_routines(payload)
+        analytics = {
+            summary["id"]: aggregate_routine_metrics(payload, summary["id"])
+            for summary in summaries
+        }
+        return jsonify({"analytics": analytics})
+
     @app.post("/api/exercises/<path:exercise_name>/graphs/<graph_name>")
     @sleep_and_retry
     @limits(calls=5,period=60)
