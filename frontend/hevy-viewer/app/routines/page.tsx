@@ -17,7 +17,8 @@ import { fetchAllRoutineAnalytics, fetchRoutines } from "../exercises/api";
 import { RoutineAnalytics, RoutineSummary, HevyCredentials, SessionBaselineComparison } from "../exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
-import { pct, shortDate, tone, toneVar } from "../format";
+import { ChangeBar } from "../change-bar";
+import { pct, shortDate, tone } from "../format";
 
 function formatChartDate(value: number): string {
   return new Date(value).toLocaleDateString(undefined, {
@@ -28,7 +29,6 @@ function formatChartDate(value: number): string {
 }
 
 const ROLLING_WINDOW = 4;
-const BAR_CAP_PCT = 30;
 
 type Mode = "previous" | "rolling";
 
@@ -48,16 +48,6 @@ function headline(title: string, time: string, baseline: SessionBaselineComparis
   const change = baseline.performance_change_pct ?? 0;
   if (baseline.status === "similar") return `${title} on ${when} matched ${against}.`;
   return `${title} on ${when} was ${Math.abs(change).toFixed(0)}% ${change > 0 ? "stronger" : "weaker"} than ${against}.`;
-}
-
-function ChangeBar({ value }: { value: number }) {
-  const width = (Math.min(Math.abs(value), BAR_CAP_PCT) / BAR_CAP_PCT) * 50;
-  return (
-    <div className="relative h-2 w-full bg-[color-mix(in_oklch,var(--border)_45%,transparent)]" aria-hidden>
-      <span className="absolute inset-y-[-3px] left-1/2 w-px bg-[var(--muted)]" />
-      <span className="absolute inset-y-0" style={{ width: `${width}%`, background: toneVar(value), ...(value >= 0 ? { left: "50%" } : { right: "50%" }) }} />
-    </div>
-  );
 }
 
 export default function RoutinesPage() {
