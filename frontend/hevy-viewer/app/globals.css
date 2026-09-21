@@ -13,6 +13,8 @@
   --chart-line: oklch(49% 0.12 55);
   --tooltip-surface: oklch(99% 0.008 75);
   --tooltip-text: oklch(23% 0.025 55);
+  --gain: oklch(52% 0.13 155);
+  --loss: oklch(52% 0.17 27);
 }
 
 :root[data-theme="blue"] {
@@ -28,6 +30,8 @@
   --chart-line: oklch(69% 0.13 205);
   --tooltip-surface: oklch(25% 0.06 255);
   --tooltip-text: oklch(94% 0.018 235);
+  --gain: oklch(76% 0.15 155);
+  --loss: oklch(70% 0.16 27);
 }
 
 :root[data-theme="cream"] {
@@ -43,6 +47,8 @@
   --chart-line: oklch(52% 0.12 78);
   --tooltip-surface: oklch(99% 0.012 92);
   --tooltip-text: oklch(27% 0.025 75);
+  --gain: oklch(50% 0.13 155);
+  --loss: oklch(50% 0.17 27);
 }
 
 :root[data-theme="mono"] {
@@ -58,6 +64,8 @@
   --chart-line: oklch(96% 0.003 90);
   --tooltip-surface: oklch(20% 0.005 90);
   --tooltip-text: oklch(96% 0.003 90);
+  --gain: oklch(76% 0.15 155);
+  --loss: oklch(70% 0.16 27);
 }
 
 @theme inline {

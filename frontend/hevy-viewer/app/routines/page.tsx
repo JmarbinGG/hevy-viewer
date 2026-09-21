@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Line,
   ComposedChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -13,7 +14,7 @@ import {
 } from "recharts";
 import { readCachedCredentials } from "../exercises/auth-cache";
 import { fetchAllRoutineAnalytics, fetchRoutines } from "../exercises/api";
-import { RoutineAnalytics, RoutineSummary, HevyCredentials, SessionBaselineComparison } from "../exercises/types";
+import { RoutineAnalytics, RoutineSummary, HevyCredentials, RoutineComparisonPoint, SessionBaselineComparison } from "../exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 
 function formatChartDate(value: number): string {
@@ -25,15 +26,24 @@ function formatChartDate(value: number): string {
 }
 
 const ROLLING_WINDOW = 4;
+const BAR_CAP_PCT = 30;
+const STRIP_SESSIONS = 40;
+
+type Mode = "previous" | "rolling";
 
 function pct(value: number | null | undefined, digits = 1): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${Math.abs(value).toFixed(digits)}%`;
 }
 
-function tone(value: number | null | undefined, invert = false): string {
+function tone(value: number | null | undefined): string {
   if (value === null || value === undefined || Math.abs(value) < 2) return "text-[var(--muted)]";
-  return (value > 0) !== invert ? "text-emerald-600" : "text-red-600";
+  return value > 0 ? "text-[var(--gain)]" : "text-[var(--loss)]";
+}
+
+function toneVar(value: number | null | undefined): string {
+  if (value === null || value === undefined || Math.abs(value) < 2) return "var(--muted)";
+  return value > 0 ? "var(--gain)" : "var(--loss)";
 }
 
 function formatStrength(value: number, metric: "1rm" | "reps", unit: "kg" | "lb"): string {
@@ -41,25 +51,59 @@ function formatStrength(value: number, metric: "1rm" | "reps", unit: "kg" | "lb"
   return `${(value * (unit === "lb" ? 2.20462 : 1)).toFixed(1)} ${unit}`;
 }
 
-function unavailableReason(baseline: SessionBaselineComparison): string {
-  if (baseline.reason === "insufficient_similarity") return `Only ${baseline.muscle_overlap_pct?.toFixed(0)}% muscle overlap — sessions too different to compare.`;
-  if (baseline.reason === "no_shared_exercises") return "No shared exercises to compare.";
-  return "Not enough earlier sessions yet.";
+function shortDate(time: string): string {
+  return new Date(time).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function DeltaCard({ title, baseline }: { title: string; baseline?: SessionBaselineComparison }) {
+function headline(title: string, time: string, baseline: SessionBaselineComparison | undefined, mode: Mode): string {
+  const when = shortDate(time);
+  const against = mode === "previous" ? "the session before" : `your last ${baseline?.sample_size ?? ROLLING_WINDOW} sessions`;
+  if (!baseline?.available) {
+    if (baseline?.reason === "insufficient_similarity") return `${title} on ${when} only trains ${baseline.shared_muscles ?? 0} of ${baseline.total_muscles ?? 0} of the same muscle groups as ${against}, so there is nothing fair to compare.`;
+    if (baseline?.reason === "no_shared_exercises") return `${title} on ${when} shares no muscle groups with ${against}.`;
+    return `${title} on ${when} has no earlier sessions to compare with.`;
+  }
+  const change = baseline.performance_change_pct ?? 0;
+  if (baseline.status === "similar") return `${title} on ${when} matched ${against}.`;
+  return `${title} on ${when} was ${Math.abs(change).toFixed(0)}% ${change > 0 ? "stronger" : "weaker"} than ${against}.`;
+}
+
+function FormStrip({ points, selectedId, onSelect }: { points: RoutineComparisonPoint[]; selectedId: string | null; onSelect: (id: string) => void }) {
+  const visible = points.slice(-STRIP_SESSIONS);
   return (
-    <div className="border border-[var(--border)] p-5">
-      <p className="eyebrow">{title}</p>
-      {baseline?.available ? <>
-        <p className={`mt-3 text-4xl font-semibold tracking-tight ${tone(baseline.performance_change_pct)}`}>{pct(baseline.performance_change_pct)}</p>
-        <p className="mt-1 text-xs text-[var(--muted)]">{baseline.confidence} confidence · {baseline.muscle_overlap_pct?.toFixed(0)}% muscle overlap</p>
-        <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-          <div><dt className="text-xs text-[var(--muted)]">Volume</dt><dd className="text-[var(--muted)]">{pct(baseline.volume_change_pct, 0)}</dd></div>
-          <div><dt className="text-xs text-[var(--muted)]">Sets</dt><dd className="text-[var(--muted)]">{pct(baseline.set_change_pct, 0)}</dd></div>
-          <div><dt className="text-xs text-[var(--muted)]">Duration</dt><dd className="text-[var(--muted)]">{pct(baseline.duration_change_pct, 0)}</dd></div>
-        </dl>
-      </> : <p className="mt-4 text-sm text-[var(--muted)]">{baseline ? unavailableReason(baseline) : "—"}</p>}
+    <div className="overflow-x-auto pb-1" role="listbox" aria-label="Sessions">
+      <div className="flex h-28 min-w-max items-center gap-1">
+        {visible.map((point) => {
+          const change = point.change_vs_previous_pct;
+          const selected = point.workout_id === selectedId;
+          const height = change === null || change === undefined ? 0 : Math.max(3, (Math.min(Math.abs(change), BAR_CAP_PCT) / BAR_CAP_PCT) * 48);
+          return (
+            <button key={point.workout_id} type="button" role="option" aria-selected={selected}
+              onClick={() => onSelect(point.workout_id)}
+              title={`${shortDate(point.time)} · ${pct(change)}`}
+              className={`relative h-full w-3.5 shrink-0 ${selected ? "bg-[var(--surface)] outline outline-1 outline-[var(--accent)]" : "hover:bg-[var(--surface)]"}`}>
+              <span className="absolute left-0 right-0 top-1/2 h-px bg-[var(--border)]" />
+              {height === 0
+                ? <span className="absolute left-1/2 top-1/2 size-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--muted)] opacity-60" />
+                : <span className="absolute left-[3px] right-[3px]" style={{ background: toneVar(change), height, ...(change! > 0 ? { bottom: "50%" } : { top: "50%" }) }} />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex justify-between text-xs text-[var(--muted)]">
+        <span>{visible[0] ? shortDate(visible[0].time) : ""}</span>
+        <span>{visible.length ? shortDate(visible[visible.length - 1].time) : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+function ChangeBar({ value }: { value: number }) {
+  const width = (Math.min(Math.abs(value), BAR_CAP_PCT) / BAR_CAP_PCT) * 50;
+  return (
+    <div className="relative h-2 w-full bg-[color-mix(in_oklch,var(--border)_45%,transparent)]" aria-hidden>
+      <span className="absolute inset-y-[-3px] left-1/2 w-px bg-[var(--muted)]" />
+      <span className="absolute inset-y-0" style={{ width: `${width}%`, background: toneVar(value), ...(value >= 0 ? { left: "50%" } : { right: "50%" }) }} />
     </div>
   );
 }
@@ -70,6 +114,8 @@ export default function RoutinesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<RoutineAnalytics | null>(null);
   const [routineAnalytics, setRoutineAnalytics] = useState<Record<string, RoutineAnalytics>>({});
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("previous");
   const [settings, setSettings] = useState<ViewerSettings>(readSettings);
   const [loading, setLoading] = useState(true);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
@@ -112,6 +158,10 @@ export default function RoutinesPage() {
     () => analytics?.comparison_points.filter((point) => !settings.startDate || point.time.slice(0, 10) >= settings.startDate) ?? [],
     [analytics, settings.startDate],
   );
+  const unit = settings.unitSystem;
+  const factor = unit === "lb" ? 2.20462 : 1;
+  const session = points.find((point) => point.workout_id === sessionId) ?? points[points.length - 1] ?? null;
+  const baseline = session ? (mode === "previous" ? session.vs_previous : session.vs_rolling) : undefined;
   const chartPoints = useMemo(() => {
     const scored = points.filter((point) => point.performance_index && Number.isFinite(new Date(point.time).getTime()));
     return scored.map((point, index) => {
@@ -123,14 +173,11 @@ export default function RoutinesPage() {
       };
     });
   }, [points]);
-  const unit = settings.unitSystem;
-  const comparison = analytics?.performance_comparison;
-  const headline = comparison?.vs_previous?.available ? comparison.vs_previous : comparison?.vs_rolling;
-  const exerciseRows = headline?.exercises ?? [];
-  const tableRows = [...points].reverse();
+  const tableRows = useMemo(() => [...points].reverse(), [points]);
 
   function selectRoutine(routineId: string): void {
     setError(null);
+    setSessionId(null);
     setAnalytics(routineAnalytics[routineId] ?? null);
     setSelectedId(routineId);
   }
@@ -141,87 +188,103 @@ export default function RoutinesPage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-10 md:px-10">
-        <header className="flex flex-wrap items-end justify-between gap-5 border-b border-[var(--border)] pb-6">
-          <div><p className="eyebrow">Hevy Viewer</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Routines</h1><p className="mt-2 text-sm text-[var(--muted)]">Compare each session to your last one and your recent average.</p></div>
-          <div className="flex gap-3"><Link href="/exercises" className="control-button">Exercises</Link><Link href="/settings" className="control-button">Settings</Link></div>
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-12 px-6 py-8 md:px-10">
+        <header className="flex flex-wrap items-center justify-between gap-4">
+          <h1 className="text-lg font-semibold tracking-tight">Routines</h1>
+          <nav className="flex gap-3"><Link href="/exercises" className="control-button">Exercises</Link><Link href="/settings" className="control-button">Settings</Link></nav>
         </header>
-        {error ? <div className="border border-red-500/60 px-4 py-3 text-sm text-red-600">{error}</div> : null}
-        <section className="grid gap-8 md:grid-cols-[300px_1fr]">
-          <aside><h2 className="eyebrow mb-3">Routine list</h2><div className="border border-[var(--border)]">
-            {loading ? <p className="px-4 py-3 text-sm text-[var(--muted)]">Loading routines...</p> : routines.length === 0 ? <p className="px-4 py-3 text-sm text-[var(--muted)]">No routines found.</p> : routines.map((routine) => (
-              <button key={routine.id} type="button" onClick={() => selectRoutine(routine.id)} className={`w-full border-b border-[var(--border)] px-4 py-3 text-left last:border-b-0 ${routine.id === selectedId ? "exercise-active" : "exercise-option"}`}>
-                <span className="block text-sm font-medium">{routine.title}</span><span className="mt-1 block text-xs opacity-75">{routine.workout_count} workouts · {routine.exercise_count} exercises</span>
+        {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
+        {loading ? <p className="text-sm text-[var(--muted)]">Loading routines...</p> : routines.length === 0 ? <p className="text-sm text-[var(--muted)]">No routines found.</p> : <>
+          <div className="-mb-6 flex gap-6 overflow-x-auto border-b border-[var(--border)]" role="tablist">
+            {routines.map((routine) => (
+              <button key={routine.id} type="button" role="tab" aria-selected={routine.id === selectedId} onClick={() => selectRoutine(routine.id)}
+                className={`-mb-px shrink-0 border-b-2 pb-3 text-sm ${routine.id === selectedId ? "border-[var(--accent)] font-semibold" : "border-transparent text-[var(--muted)] hover:text-[var(--foreground)]"}`}>
+                {routine.title} <span className="ml-1 text-xs opacity-60">{routine.workout_count}</span>
               </button>
-            ))}</div></aside>
-          <section className="space-y-6">
-            {!selected ? <div className="border border-[var(--border)] p-5 text-sm text-[var(--muted)]">Select a routine to view comparisons.</div> : <><div className="border border-[var(--border)] p-5"><h2 className="text-2xl font-semibold">{selected.title}</h2><p className="mt-2 text-sm text-[var(--muted)]">{selected.workout_count} sessions · {selected.exercise_count} exercises</p></div>
-              {loadingAnalytics ? <div className="border border-[var(--border)] p-5 text-sm text-[var(--muted)]">Loading routine metrics...</div> : analytics ? <>
-               {comparison ? <>
-                 <div className="border border-[var(--border)] p-5">
-                   <p className="eyebrow">Latest session · {comparison.current ? new Date(comparison.current.time).toLocaleDateString() : ""}</p>
-                   <h3 className="mt-2 text-xl font-semibold">{comparison.message}</h3>
-                 </div>
-                 <div className="grid gap-4 md:grid-cols-2">
-                   <DeltaCard title="vs previous session" baseline={comparison.vs_previous} />
-                   <DeltaCard title={`vs last ${ROLLING_WINDOW} average`} baseline={comparison.vs_rolling} />
-                 </div>
-                 {exerciseRows.length > 0 ? <div className="border border-[var(--border)] p-5">
-                   <h3 className="text-lg font-semibold">Exercise breakdown</h3>
-                   <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm">
-                     <thead className="text-xs uppercase tracking-wider text-[var(--muted)]"><tr><th className="pb-3">Exercise</th><th className="pb-3">Before</th><th className="pb-3">Now</th><th className="pb-3">Change</th><th className="pb-3">Sets</th></tr></thead>
-                     <tbody>{exerciseRows.map((row) => <tr key={row.name} className="border-t border-[var(--border)]">
-                       <td className="py-3 pr-3">{row.name}</td>
-                       <td className="py-3 pr-3 text-[var(--muted)]">{formatStrength(row.baseline, row.metric, unit)}</td>
-                       <td className="py-3 pr-3">{formatStrength(row.current, row.metric, unit)}</td>
-                       <td className={`py-3 pr-3 font-semibold ${tone(row.change_pct)}`}>{pct(row.change_pct)}</td>
-                       <td className="py-3 text-[var(--muted)]">{row.baseline_sets} → {row.current_sets}</td>
-                     </tr>)}</tbody></table></div>
-                   {(headline?.added_exercises?.length || headline?.removed_exercises?.length) ? <p className="mt-4 text-xs text-[var(--muted)]">
-                     {headline?.added_exercises?.length ? `New: ${headline.added_exercises.join(", ")}. ` : ""}{headline?.removed_exercises?.length ? `Skipped: ${headline.removed_exercises.join(", ")}.` : ""}
-                   </p> : null}
-                 </div> : null}
-               </> : null}
-               <div className="border border-[var(--border)] p-5">
-                  <div className="flex flex-wrap items-baseline justify-between gap-3">
-                    <div>
-                     <h3 className="text-lg font-semibold">{selected.title} trend</h3>
+            ))}
+          </div>
+          {loadingAnalytics ? <p className="text-sm text-[var(--muted)]">Loading routine metrics...</p> : !selected || !session ? <p className="text-sm text-[var(--muted)]">No sessions match the selected start date.</p> : <>
+            <section className="grid gap-8 md:grid-cols-[1fr_auto] md:items-end">
+              <div>
+                <h2 className="max-w-[28ch] text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{headline(selected.title, session.time, baseline, mode)}</h2>
+                <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm tabular-nums">
+                  <div><dt className="text-[var(--muted)]">Strength</dt><dd className={`text-2xl font-semibold ${tone(baseline?.performance_change_pct)}`}>{baseline?.available ? pct(baseline.performance_change_pct) : "—"}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Volume</dt><dd className="text-2xl font-semibold">{Math.round(session.volume_kg * factor).toLocaleString()} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.volume_change_pct, 0) : ""}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Sets</dt><dd className="text-2xl font-semibold">{session.set_count ?? "—"}</dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.set_change_pct, 0) : ""}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Time</dt><dd className="text-2xl font-semibold">{session.duration_min ? `${Math.round(session.duration_min)}m` : "—"}</dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.duration_change_pct, 0) : ""}</dd></div>
+                </dl>
+              </div>
+              <div className="segmented-control self-start md:self-end" role="group" aria-label="Compare against">
+                <button type="button" className={mode === "previous" ? "segment-active" : "segment"} onClick={() => setMode("previous")}>Previous</button>
+                <button type="button" className={mode === "rolling" ? "segment-active" : "segment"} onClick={() => setMode("rolling")}>{ROLLING_WINDOW}-avg</button>
+              </div>
+            </section>
+
+            <FormStrip points={points} selectedId={session.workout_id} onSelect={setSessionId} />
+
+            {baseline?.available && baseline.muscles?.length ? <section>
+              <h3 className="text-lg font-semibold">Muscle groups</h3>
+              <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                {baseline.muscles.map((row) => (
+                  <li key={`${row.muscle}-${row.metric}`} className="grid items-center gap-x-6 gap-y-2 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_4.5rem]">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium capitalize">{row.muscle.replace(/_/g, " ")}</p>
+                      {row.basis === "same"
+                        ? row.lifts?.map((lift) => <p key={lift.name} className="truncate text-xs tabular-nums text-[var(--muted)]">{lift.name} · {formatStrength(lift.baseline, row.metric, unit)} to {formatStrength(lift.current, row.metric, unit)}</p>)
+                        : <p className="truncate text-xs text-[var(--muted)]">{row.swap_from?.join(", ")} to {row.swap_to?.join(", ")}{row.baseline && row.current ? ` · best ${formatStrength(row.baseline, row.metric, unit)} to ${formatStrength(row.current, row.metric, unit)}` : ""}</p>}
                     </div>
-                   <span className="text-xs text-[var(--muted)]">Higher is better</span>
-                  </div>
-                 {chartPoints.length > 0 ? (
-                    <div className="mt-5 h-80 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                       <ComposedChart data={chartPoints} margin={{ top: 20, right: 20, left: 12, bottom: 12 }}>
-                          <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 2" />
-                          <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatChartDate} stroke="var(--chart-axis)" minTickGap={24} />
-                          <YAxis width={56} stroke="var(--chart-axis)" tickFormatter={(value: number) => Math.round(value).toString()} domain={["auto", "auto"]} />
-                          <Tooltip
-                            labelFormatter={(value) => formatChartDate(Number(value))}
-                            formatter={(value, name) => [Number(value ?? 0).toFixed(1), name === "index" ? "Session" : "Rolling avg"]}
-                            contentStyle={{ backgroundColor: "var(--tooltip-surface)", borderColor: "var(--border)", color: "var(--tooltip-text)" }}
-                            itemStyle={{ color: "var(--tooltip-text)" }}
-                            labelStyle={{ color: "var(--tooltip-text)" }}
-                          />
-                          <Line type="monotone" dataKey="index" name="index" stroke="var(--chart-axis)" strokeWidth={1.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                          <Line type="monotone" dataKey="rolling" name="rolling" stroke="hsl(150 65% 40%)" strokeWidth={2.5} strokeDasharray="5 3" dot={false} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  ) : <p className="mt-5 text-sm text-[var(--muted)]">No sessions match the selected start date.</p>}
+                    <ChangeBar value={row.change_pct} />
+                    <p className={`text-right text-sm font-semibold tabular-nums ${tone(row.change_pct)}`}>{pct(row.change_pct)}</p>
+                  </li>
+                ))}
+              </ul>
+              {(baseline.added_muscles?.length || baseline.removed_muscles?.length) ? <p className="mt-3 text-xs text-[var(--muted)]">
+                {baseline.added_muscles?.length ? `New: ${baseline.added_muscles.join(", ")}. ` : ""}{baseline.removed_muscles?.length ? `Skipped: ${baseline.removed_muscles.join(", ")}.` : ""}
+              </p> : null}
+            </section> : null}
+
+            <section>
+              <h3 className="text-lg font-semibold">Trend</h3>
+              {chartPoints.length > 0 ? (
+                <div className="mt-4 h-72 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartPoints} margin={{ top: 12, right: 12, left: 0, bottom: 8 }}>
+                      <CartesianGrid stroke="var(--chart-grid)" strokeDasharray="2 2" vertical={false} />
+                      <XAxis dataKey="timestamp" type="number" scale="time" domain={["dataMin", "dataMax"]} tickFormatter={formatChartDate} stroke="var(--chart-axis)" minTickGap={24} />
+                      <YAxis width={44} stroke="var(--chart-axis)" tickFormatter={(value: number) => Math.round(value).toString()} domain={["auto", "auto"]} />
+                      <Tooltip
+                        labelFormatter={(value) => formatChartDate(Number(value))}
+                        formatter={(value, name) => [Number(value ?? 0).toFixed(1), name === "index" ? "Session" : `${ROLLING_WINDOW}-session average`]}
+                        contentStyle={{ backgroundColor: "var(--tooltip-surface)", borderColor: "var(--border)", color: "var(--tooltip-text)" }}
+                        itemStyle={{ color: "var(--tooltip-text)" }}
+                        labelStyle={{ color: "var(--tooltip-text)" }}
+                      />
+                      <ReferenceLine x={new Date(session.time).getTime()} stroke="var(--accent)" strokeDasharray="3 3" />
+                      <Line type="monotone" dataKey="index" name="index" stroke="var(--chart-axis)" strokeWidth={1.5} dot={{ r: 2.5 }} activeDot={{ r: 5 }} />
+                      <Line type="monotone" dataKey="rolling" name="rolling" stroke="var(--gain)" strokeWidth={2.5} dot={false} />
+                    </ComposedChart>
+                  </ResponsiveContainer>
                 </div>
-                <div className="border border-[var(--border)] p-5"><h3 className="text-lg font-semibold">Session history</h3><div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs uppercase tracking-wider text-[var(--muted)]"><tr><th className="pb-3">Session</th><th className="pb-3">Index</th><th className="pb-3">vs prev</th><th className="pb-3">Volume</th><th className="pb-3">Sets</th><th className="pb-3">Time</th></tr></thead><tbody>{tableRows.map((point) => <tr key={point.workout_id} className="border-t border-[var(--border)]">
-                  <td className="py-3 pr-3">{new Date(point.time).toLocaleDateString()}</td>
-                  <td className="py-3 pr-3">{point.performance_index ? point.performance_index.toFixed(0) : "—"}</td>
-                  <td className={`py-3 pr-3 font-semibold ${tone(point.change_vs_previous_pct)}`}>{pct(point.change_vs_previous_pct)}</td>
-                  <td className="py-3 pr-3 text-[var(--muted)]">{Math.round(point.volume_kg * (unit === "lb" ? 2.20462 : 1)).toLocaleString()} {unit}</td>
-                  <td className="py-3 pr-3 text-[var(--muted)]">{point.set_count ?? "—"}</td>
-                  <td className="py-3 text-[var(--muted)]">{point.duration_min ? `${Math.round(point.duration_min)}m` : "—"}</td>
-                </tr>)}</tbody></table>{points.length === 0 ? <p className="pt-4 text-sm text-[var(--muted)]">No sessions match the selected start date.</p> : null}</div></div>
-              </> : null}
-            </>}
-          </section>
-        </section>
+              ) : null}
+            </section>
+
+            <section>
+              <h3 className="text-lg font-semibold">History</h3>
+              <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm tabular-nums">
+                <thead className="text-[var(--muted)]"><tr><th className="pb-3 font-normal">Session</th><th className="pb-3 font-normal">Index</th><th className="pb-3 font-normal">Change</th><th className="pb-3 font-normal">Volume</th><th className="pb-3 font-normal">Sets</th><th className="pb-3 font-normal">Time</th></tr></thead>
+                <tbody>{tableRows.map((point) => (
+                  <tr key={point.workout_id} onClick={() => setSessionId(point.workout_id)} className={`cursor-pointer border-t border-[var(--border)] hover:bg-[var(--surface)] ${point.workout_id === session.workout_id ? "bg-[var(--surface)]" : ""}`}>
+                    <td className="py-3 pr-3">{new Date(point.time).toLocaleDateString()}</td>
+                    <td className="py-3 pr-3">{point.performance_index ? point.performance_index.toFixed(0) : "—"}</td>
+                    <td className={`py-3 pr-3 font-semibold ${tone(point.change_vs_previous_pct)}`}>{pct(point.change_vs_previous_pct)}</td>
+                    <td className="py-3 pr-3 text-[var(--muted)]">{Math.round(point.volume_kg * factor).toLocaleString()} {unit}</td>
+                    <td className="py-3 pr-3 text-[var(--muted)]">{point.set_count ?? "—"}</td>
+                    <td className="py-3 text-[var(--muted)]">{point.duration_min ? `${Math.round(point.duration_min)}m` : "—"}</td>
+                  </tr>
+                ))}</tbody></table></div>
+            </section>
+          </>}
+        </>}
       </main>
     </div>
   );

@@ -438,7 +438,7 @@ def routine_analytics(
 
 
 ROLLING_WINDOW = 4
-MIN_MUSCLE_OVERLAP = 0.7
+MIN_EXERCISE_COVERAGE = 0.5
 
 
 def _exercise_session_stats(exercise: Mapping[str, Any]) -> dict[str, Any] | None:
@@ -473,6 +473,7 @@ def _exercise_session_stats(exercise: Mapping[str, Any]) -> dict[str, Any] | Non
     use_1rm = best_1rm > 0
     return {
         "name": name,
+        "muscle": _first_string(exercise, ("muscle_group", "primary_muscle_group", "muscleGroup"), default="Unknown Muscle Group"),
         "sets": sets,
         "volume_kg": round(volume, 2),
         "top_weight_kg": round(top_weight, 2),
@@ -509,64 +510,112 @@ def _apply_performance_scores(points: list[dict[str, Any]]) -> None:
         point["performance_index"] = index
         point["normalized_performance"] = index
     for position, point in enumerate(points):
-        previous = _compare_to_baseline(point, points[max(0, position - 1):position]) if position else None
+        earlier = points[:position]
+        vs_previous = _compare_to_baseline(point, earlier[-1:])
+        vs_rolling = _compare_to_baseline(point, earlier[-ROLLING_WINDOW:]) if len(earlier) >= 2 else {
+            "available": False, "reason": "no_baseline", "sample_size": len(earlier),
+        }
+        point["vs_previous"] = vs_previous
+        point["vs_rolling"] = vs_rolling
         point["change_vs_previous_pct"] = (
-            previous["performance_change_pct"] if previous and previous["available"] else None
+            vs_previous["performance_change_pct"] if vs_previous["available"] else None
         )
 
 
 def _compare_to_baseline(
     current: Mapping[str, Any], baseline_points: list[Mapping[str, Any]]
 ) -> dict[str, Any]:
-    """Compare a session with one or several earlier sessions (averaged)."""
+    """Compare a session with one or several earlier sessions, muscle group by muscle group.
+
+    Same lift in both sessions: compared directly.  Different lift for the same
+    muscle: best set for that muscle now vs. before (marked ``swapped``).
+    """
     if not baseline_points:
         return {"available": False, "reason": "no_baseline", "sample_size": 0}
 
-    base_strength: dict[str, list[dict[str, float]]] = defaultdict(list)
+    def group_key(exercise: Mapping[str, Any]) -> tuple[str, str]:
+        return (str(exercise.get("muscle") or "Unknown Muscle Group"), str(exercise["metric"]))
+
+    base_by_lift: dict[str, list[Mapping[str, Any]]] = defaultdict(list)
+    base_best: dict[tuple[str, str], list[float]] = defaultdict(list)
+    base_names: dict[tuple[str, str], list[str]] = defaultdict(list)
     base_muscles: dict[str, float] = defaultdict(float)
     for point in baseline_points:
         for muscle, value in (point.get("muscle_groups") or {}).items():
             base_muscles[muscle] += _to_float(value) / len(baseline_points)
+        session_best: dict[tuple[str, str], float] = {}
         for exercise in point.get("exercises", []):
-            base_strength[f"{exercise['name']}|{exercise['metric']}"].append(exercise)
+            base_by_lift[f"{exercise['name']}|{exercise['metric']}"].append(exercise)
+            key = group_key(exercise)
+            session_best[key] = max(session_best.get(key, 0.0), _to_float(exercise["strength"]))
+            if exercise["name"] not in base_names[key]:
+                base_names[key].append(exercise["name"])
+        for key, value in session_best.items():
+            if value > 0:
+                base_best[key].append(value)
 
     overlap = _muscle_overlap(current.get("muscle_groups") or {}, base_muscles)
-    if overlap < MIN_MUSCLE_OVERLAP:
+
+    groups: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for exercise in current.get("exercises", []):
+        if _to_float(exercise["strength"]) > 0:
+            groups[group_key(exercise)].append(exercise)
+
+    rows: list[dict[str, Any]] = []
+    added: list[str] = []
+    for key, lifts in groups.items():
+        muscle, metric = key
+        lift_rows: list[dict[str, Any]] = []
+        for exercise in lifts:
+            history = base_by_lift.get(f"{exercise['name']}|{metric}")
+            if not history:
+                continue
+            base = sum(_to_float(item["strength"]) for item in history) / len(history)
+            if base <= 0:
+                continue
+            lift_rows.append({
+                "name": exercise["name"],
+                "current": exercise["strength"],
+                "baseline": round(base, 2),
+                "change_pct": round((_to_float(exercise["strength"]) - base) / base * 100, 1),
+                "current_sets": exercise["sets"],
+                "baseline_sets": round(sum(item["sets"] for item in history) / len(history), 1),
+            })
+        current_sets = sum(int(item["sets"]) for item in lifts)
+        if lift_rows:
+            change = sum(item["change_pct"] for item in lift_rows) / len(lift_rows)
+            rows.append({
+                "muscle": muscle, "metric": metric, "basis": "same",
+                "change_pct": round(change, 1), "current_sets": current_sets,
+                "lifts": lift_rows,
+            })
+            continue
+        history_best = base_best.get(key)
+        if not history_best:
+            added.append(muscle)
+            continue
+        base = sum(history_best) / len(history_best)
+        now = max(_to_float(item["strength"]) for item in lifts)
+        rows.append({
+            "muscle": muscle, "metric": metric, "basis": "swapped",
+            "change_pct": round((now - base) / base * 100, 1), "current_sets": current_sets,
+            "swap_from": base_names[key], "swap_to": [item["name"] for item in lifts],
+            "current": round(now, 2), "baseline": round(base, 2),
+        })
+    current_keys = set(groups)
+    removed = sorted({key[0] for key in base_best if key not in current_keys})
+    total = len(groups)
+    coverage = len(rows) / max(total, 1)
+    if not rows:
+        return {"available": False, "reason": "no_shared_exercises", "sample_size": len(baseline_points)}
+    if coverage < MIN_EXERCISE_COVERAGE:
         return {
             "available": False,
             "reason": "insufficient_similarity",
             "sample_size": len(baseline_points),
-            "muscle_overlap_pct": round(overlap * 100, 1),
+            "shared_muscles": len(rows),
+            "total_muscles": total,
         }
-
-    rows: list[dict[str, Any]] = []
-    matched_keys: set[str] = set()
-    added: list[str] = []
-    for exercise in current.get("exercises", []):
-        key = f"{exercise['name']}|{exercise['metric']}"
-        history = base_strength.get(key)
-        if not history or _to_float(exercise["strength"]) <= 0:
-            added.append(exercise["name"])
-            continue
-        matched_keys.add(key)
-        base = sum(_to_float(item["strength"]) for item in history) / len(history)
-        if base <= 0:
-            continue
-        rows.append({
-            "name": exercise["name"],
-            "metric": exercise["metric"],
-            "current": exercise["strength"],
-            "baseline": round(base, 2),
-            "change_pct": round((_to_float(exercise["strength"]) - base) / base * 100, 1),
-            "current_sets": exercise["sets"],
-            "baseline_sets": round(sum(item["sets"] for item in history) / len(history), 1),
-            "current_volume_kg": exercise["volume_kg"],
-            "baseline_volume_kg": round(sum(_to_float(item["volume_kg"]) for item in history) / len(history), 1),
-            "current_top": [exercise["top_weight_kg"], exercise["top_reps"]],
-        })
-    removed = [key.split("|")[0] for key in base_strength if key not in matched_keys]
-    if not rows:
-        return {"available": False, "reason": "no_shared_exercises", "sample_size": len(baseline_points)}
 
     def _avg(field: str) -> float | None:
         values = [_to_float(point.get(field)) for point in baseline_points if _to_float(point.get(field)) > 0]
@@ -577,11 +626,8 @@ def _compare_to_baseline(
         return round((now - base) / base * 100, 1) if base and now > 0 else None
 
     change = sum(row["change_pct"] for row in rows) / len(rows)
-    coverage = len(rows) / max(len(current.get("exercises", [])), 1)
-    if overlap >= 0.85 and coverage >= 0.75:
-        confidence = "high"
-    else:
-        confidence = "medium"
+    same_share = sum(1 for row in rows if row["basis"] == "same") / len(rows)
+    confidence = "high" if coverage >= 0.75 and len(rows) >= 3 and same_share >= 0.5 else "medium" if len(rows) >= 2 else "low"
     return {
         "available": True,
         "status": "improved" if change >= 2 else "declined" if change <= -2 else "similar",
@@ -589,13 +635,15 @@ def _compare_to_baseline(
         "confidence": confidence,
         "sample_size": len(baseline_points),
         "muscle_overlap_pct": round(overlap * 100, 1),
+        "shared_muscles": len(rows),
+        "total_muscles": total,
         "volume_change_pct": _pct("volume_kg"),
         "set_change_pct": _pct("set_count"),
         "duration_change_pct": _pct("duration_min"),
         "baseline_time": baseline_points[-1].get("time"),
-        "exercises": sorted(rows, key=lambda row: -row["change_pct"]),
-        "added_exercises": added,
-        "removed_exercises": removed,
+        "muscles": sorted(rows, key=lambda row: -row["change_pct"]),
+        "added_muscles": sorted(added),
+        "removed_muscles": removed,
     }
 
 
@@ -626,7 +674,7 @@ def _routine_performance_comparison(points: list[Mapping[str, Any]]) -> dict[str
         if headline is vs_rolling:
             message = message.replace("your last session", f"your last {vs_rolling['sample_size']}-session average")
     else:
-        message = "Recent sessions are too different (muscle overlap) for a reliable comparison."
+        message = "Recent sessions share too few muscle groups for a reliable comparison."
     return {
         "available": bool(headline["available"]),
         "status": headline.get("status", "insufficient_similarity"),
@@ -646,11 +694,18 @@ def _routine_performance_comparison(points: list[Mapping[str, Any]]) -> dict[str
 
 
 def _muscle_overlap(left: Mapping[str, Any], right: Mapping[str, Any]) -> float:
-    keys = set(left) | set(right)
-    denominator = sum(max(_to_float(left.get(key)), _to_float(right.get(key))) for key in keys)
-    if denominator <= 0:
+    """Similarity of muscle mix (0-1), by each muscle's share of the session.
+
+    Shares, not raw set counts, so a shorter session that hits the same muscles
+    still counts as similar.
+    """
+    left_total = sum(_to_float(value) for value in left.values())
+    right_total = sum(_to_float(value) for value in right.values())
+    if left_total <= 0 or right_total <= 0:
         return 0.0
-    return sum(min(_to_float(left.get(key)), _to_float(right.get(key))) for key in keys) / denominator
+    keys = set(left) | set(right)
+    shares = [(_to_float(left.get(key)) / left_total, _to_float(right.get(key)) / right_total) for key in keys]
+    return sum(min(pair) for pair in shares) / sum(max(pair) for pair in shares)
 
 
 def _exercise_muscle_contributions(exercise: Mapping[str, Any]) -> dict[str, float]:

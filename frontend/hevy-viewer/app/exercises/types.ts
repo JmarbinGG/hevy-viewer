@@ -84,19 +84,30 @@ export type RoutineComparisonPoint = {
   set_count?: number;
   duration_min?: number | null;
   exercises?: RoutineExerciseStats[];
+  vs_previous?: SessionBaselineComparison;
+  vs_rolling?: SessionBaselineComparison;
 };
 
-export type ExerciseComparisonRow = {
+export type MuscleLiftRow = {
   name: string;
-  metric: "1rm" | "reps";
   current: number;
   baseline: number;
   change_pct: number;
   current_sets: number;
   baseline_sets: number;
-  current_volume_kg: number;
-  baseline_volume_kg: number;
-  current_top: [number, number];
+};
+
+export type MuscleComparisonRow = {
+  muscle: string;
+  metric: "1rm" | "reps";
+  basis: "same" | "swapped";
+  change_pct: number;
+  current_sets: number;
+  lifts?: MuscleLiftRow[];
+  swap_from?: string[];
+  swap_to?: string[];
+  current?: number;
+  baseline?: number;
 };
 
 export type SessionBaselineComparison = {
@@ -107,13 +118,15 @@ export type SessionBaselineComparison = {
   performance_change_pct?: number;
   confidence?: "high" | "medium" | "low";
   muscle_overlap_pct?: number;
+  shared_muscles?: number;
+  total_muscles?: number;
   volume_change_pct?: number | null;
   set_change_pct?: number | null;
   duration_change_pct?: number | null;
   baseline_time?: string;
-  exercises?: ExerciseComparisonRow[];
-  added_exercises?: string[];
-  removed_exercises?: string[];
+  muscles?: MuscleComparisonRow[];
+  added_muscles?: string[];
+  removed_muscles?: string[];
 };
 
 export type RoutinePerformanceComparison = {
