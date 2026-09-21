@@ -1,1 +1,5 @@
 /backend/hevy_data.json
+# local sign-in hashes, caches
+/backend/.auth.json
+__pycache__/
+.pytest_cache/
