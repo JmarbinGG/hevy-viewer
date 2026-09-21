@@ -59,7 +59,7 @@ function headline(title: string, time: string, baseline: SessionBaselineComparis
   const when = shortDate(time);
   const against = mode === "previous" ? "the session before" : `your last ${baseline?.sample_size ?? ROLLING_WINDOW} sessions`;
   if (!baseline?.available) {
-    if (baseline?.reason === "insufficient_similarity") return `${title} on ${when} only trains ${baseline.shared_muscles ?? 0} of ${baseline.total_muscles ?? 0} of the same muscle groups as ${against}, so there is nothing fair to compare.`;
+    if (baseline?.reason === "insufficient_similarity") return `${title} on ${when} shares only ${baseline.shared_muscles ?? 0} of ${baseline.total_muscles ?? 0} muscle groups with ${against}, so there is no fair comparison.`;
     if (baseline?.reason === "no_shared_exercises") return `${title} on ${when} shares no muscle groups with ${against}.`;
     return `${title} on ${when} has no earlier sessions to compare with.`;
   }
@@ -206,12 +206,12 @@ export default function RoutinesPage() {
           {loadingAnalytics ? <p className="text-sm text-[var(--muted)]">Loading routine metrics...</p> : !selected || !session ? <p className="text-sm text-[var(--muted)]">No sessions match the selected start date.</p> : <>
             <section className="grid gap-8 md:grid-cols-[1fr_auto] md:items-end">
               <div>
-                <h2 className="max-w-[28ch] text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{headline(selected.title, session.time, baseline, mode)}</h2>
+                <h2 className="min-h-[3lh] max-w-[36ch] text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{headline(selected.title, session.time, baseline, mode)}</h2>
                 <dl className="mt-6 flex flex-wrap gap-x-10 gap-y-3 text-sm tabular-nums">
                   <div><dt className="text-[var(--muted)]">Strength</dt><dd className={`text-2xl font-semibold ${tone(baseline?.performance_change_pct)}`}>{baseline?.available ? pct(baseline.performance_change_pct) : "—"}</dd></div>
-                  <div><dt className="text-[var(--muted)]">Volume</dt><dd className="text-2xl font-semibold">{Math.round(session.volume_kg * factor).toLocaleString()} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.volume_change_pct, 0) : ""}</dd></div>
-                  <div><dt className="text-[var(--muted)]">Sets</dt><dd className="text-2xl font-semibold">{session.set_count ?? "—"}</dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.set_change_pct, 0) : ""}</dd></div>
-                  <div><dt className="text-[var(--muted)]">Time</dt><dd className="text-2xl font-semibold">{session.duration_min ? `${Math.round(session.duration_min)}m` : "—"}</dd><dd className="text-[var(--muted)]">{baseline?.available ? pct(baseline.duration_change_pct, 0) : ""}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Volume</dt><dd className="text-2xl font-semibold">{Math.round(session.volume_kg * factor).toLocaleString()} <span className="text-sm font-normal text-[var(--muted)]">{unit}</span></dd><dd className="h-5 text-[var(--muted)]">{baseline?.available ? pct(baseline.volume_change_pct, 0) : ""}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Sets</dt><dd className="text-2xl font-semibold">{session.set_count ?? "—"}</dd><dd className="h-5 text-[var(--muted)]">{baseline?.available ? pct(baseline.set_change_pct, 0) : ""}</dd></div>
+                  <div><dt className="text-[var(--muted)]">Time</dt><dd className="text-2xl font-semibold">{session.duration_min ? `${Math.round(session.duration_min)}m` : "—"}</dd><dd className="h-5 text-[var(--muted)]">{baseline?.available ? pct(baseline.duration_change_pct, 0) : ""}</dd></div>
                 </dl>
               </div>
               <div className="segmented-control self-start md:self-end" role="group" aria-label="Compare against">
@@ -221,27 +221,6 @@ export default function RoutinesPage() {
             </section>
 
             <FormStrip points={points} selectedId={session.workout_id} onSelect={setSessionId} />
-
-            {baseline?.available && baseline.muscles?.length ? <section>
-              <h3 className="text-lg font-semibold">Muscle groups</h3>
-              <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-                {baseline.muscles.map((row) => (
-                  <li key={`${row.muscle}-${row.metric}`} className="grid items-center gap-x-6 gap-y-2 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_4.5rem]">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium capitalize">{row.muscle.replace(/_/g, " ")}</p>
-                      {row.basis === "same"
-                        ? row.lifts?.map((lift) => <p key={lift.name} className="truncate text-xs tabular-nums text-[var(--muted)]">{lift.name} · {formatStrength(lift.baseline, row.metric, unit)} to {formatStrength(lift.current, row.metric, unit)}</p>)
-                        : <p className="truncate text-xs text-[var(--muted)]">{row.swap_from?.join(", ")} to {row.swap_to?.join(", ")}{row.baseline && row.current ? ` · best ${formatStrength(row.baseline, row.metric, unit)} to ${formatStrength(row.current, row.metric, unit)}` : ""}</p>}
-                    </div>
-                    <ChangeBar value={row.change_pct} />
-                    <p className={`text-right text-sm font-semibold tabular-nums ${tone(row.change_pct)}`}>{pct(row.change_pct)}</p>
-                  </li>
-                ))}
-              </ul>
-              {(baseline.added_muscles?.length || baseline.removed_muscles?.length) ? <p className="mt-3 text-xs text-[var(--muted)]">
-                {baseline.added_muscles?.length ? `New: ${baseline.added_muscles.join(", ")}. ` : ""}{baseline.removed_muscles?.length ? `Skipped: ${baseline.removed_muscles.join(", ")}.` : ""}
-              </p> : null}
-            </section> : null}
 
             <section>
               <h3 className="text-lg font-semibold">Trend</h3>
@@ -267,6 +246,27 @@ export default function RoutinesPage() {
                 </div>
               ) : null}
             </section>
+
+            {baseline?.available && baseline.muscles?.length ? <section>
+              <h3 className="text-lg font-semibold">Muscle groups</h3>
+              <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                {baseline.muscles.map((row) => (
+                  <li key={`${row.muscle}-${row.metric}`} className="grid items-center gap-x-6 gap-y-2 py-3 md:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_4.5rem]">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium capitalize">{row.muscle.replace(/_/g, " ")}</p>
+                      {row.basis === "same"
+                        ? row.lifts?.map((lift) => <p key={lift.name} className="truncate text-xs tabular-nums text-[var(--muted)]">{lift.name} · {formatStrength(lift.baseline, row.metric, unit)} to {formatStrength(lift.current, row.metric, unit)}</p>)
+                        : <p className="truncate text-xs text-[var(--muted)]">{row.swap_from?.join(", ")} to {row.swap_to?.join(", ")}{row.baseline && row.current ? ` · best ${formatStrength(row.baseline, row.metric, unit)} to ${formatStrength(row.current, row.metric, unit)}` : ""}</p>}
+                    </div>
+                    <ChangeBar value={row.change_pct} />
+                    <p className={`text-right text-sm font-semibold tabular-nums ${tone(row.change_pct)}`}>{pct(row.change_pct)}</p>
+                  </li>
+                ))}
+              </ul>
+              {(baseline.added_muscles?.length || baseline.removed_muscles?.length) ? <p className="mt-3 text-xs text-[var(--muted)]">
+                {baseline.added_muscles?.length ? `New: ${baseline.added_muscles.join(", ")}. ` : ""}{baseline.removed_muscles?.length ? `Skipped: ${baseline.removed_muscles.join(", ")}.` : ""}
+              </p> : null}
+            </section> : null}
 
             <section>
               <h3 className="text-lg font-semibold">History</h3>
