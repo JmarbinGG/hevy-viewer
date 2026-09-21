@@ -18,6 +18,7 @@ import { RoutineAnalytics, RoutineSummary, HevyCredentials, SessionBaselineCompa
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
 import { ChangeBar } from "../change-bar";
+import { TopBar } from "../top-bar";
 import { pct, shortDate, tone } from "../format";
 
 function formatChartDate(value: number): string {
@@ -136,11 +137,8 @@ export default function RoutinesPage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-12 px-6 py-8 md:px-12 xl:px-16">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold tracking-tight">Routines</h1>
-          <nav className="flex gap-3"><Link href="/exercises" className="control-button">Exercises</Link><Link href="/settings" className="control-button">Settings</Link></nav>
-        </header>
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-12 px-6 py-6 md:px-12 xl:px-16">
+        <TopBar />
         {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
         {loading ? <p className="text-sm text-[var(--muted)]">Loading routines...</p> : routines.length === 0 ? <p className="text-sm text-[var(--muted)]">No routines found.</p> : <>
           <div className="-mb-6 flex gap-6 overflow-x-auto border-b border-[var(--border)]" role="tablist">

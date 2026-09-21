@@ -155,3 +155,13 @@ export type RoutineAnalytics = {
   comparison_points: RoutineComparisonPoint[];
   performance_comparison?: RoutinePerformanceComparison;
 };
+
+export type WorkoutSummary = {
+  workout_id: string;
+  time: string;
+  name: string;
+  routine_id: string | null;
+  volume_kg: number;
+  set_count: number;
+  duration_min: number | null;
+};

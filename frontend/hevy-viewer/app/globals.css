@@ -14,7 +14,7 @@
   --tooltip-surface: oklch(99% 0.008 75);
   --tooltip-text: oklch(23% 0.025 55);
   --gain: oklch(52% 0.13 155);
-  --loss: oklch(52% 0.17 27);
+  --loss: oklch(52% 0.23 27);
 }
 
 :root[data-theme="blue"] {
@@ -31,7 +31,7 @@
   --tooltip-surface: oklch(25% 0.06 255);
   --tooltip-text: oklch(94% 0.018 235);
   --gain: oklch(76% 0.15 155);
-  --loss: oklch(70% 0.16 27);
+  --loss: oklch(64% 0.24 27);
 }
 
 :root[data-theme="cream"] {
@@ -48,7 +48,7 @@
   --tooltip-surface: oklch(99% 0.012 92);
   --tooltip-text: oklch(27% 0.025 75);
   --gain: oklch(50% 0.13 155);
-  --loss: oklch(50% 0.17 27);
+  --loss: oklch(50% 0.23 27);
 }
 
 :root[data-theme="mono"] {
@@ -65,7 +65,7 @@
   --tooltip-surface: oklch(20% 0.005 90);
   --tooltip-text: oklch(96% 0.003 90);
   --gain: oklch(76% 0.15 155);
-  --loss: oklch(70% 0.16 27);
+  --loss: oklch(64% 0.24 27);
 }
 
 @theme inline {
@@ -91,7 +91,7 @@ body {
 .app-shell { background: var(--background); color: var(--foreground); }
 .eyebrow { color: var(--muted); font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; }
 .control-button, .control-input { border: 1px solid var(--border); background: var(--surface); color: var(--foreground); padding: 0.55rem 0.8rem; font-size: 0.8rem; }
-.control-button:hover { border-color: var(--accent); color: var(--accent); }
+.control-button:hover, .control-button[aria-current="page"] { border-color: var(--accent); color: var(--accent); }
 .control-button { display: inline-flex; align-items: center; justify-content: center; font-weight: 500; letter-spacing: 0.04em; }
 .control-button:focus-visible, .control-input:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app-shell input, .app-shell select { border-color: var(--border); background: var(--surface); color: var(--foreground); }

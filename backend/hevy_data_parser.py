@@ -437,6 +437,35 @@ def aggregate_routine_metrics(
     }
 
 
+def list_workouts(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Every logged workout (routine or not), oldest first, for calendar views."""
+    workouts = payload.get("workouts")
+    if not isinstance(workouts, list):
+        raise ValueError("Expected payload['workouts'] to be a list")
+    result: list[dict[str, Any]] = []
+    for workout in workouts:
+        if not isinstance(workout, Mapping):
+            continue
+        stats = [
+            item
+            for exercise in workout.get("exercises") or []
+            if isinstance(exercise, Mapping)
+            for item in [_exercise_session_stats(exercise)]
+            if item is not None
+        ]
+        result.append({
+            "workout_id": str(workout.get("id") or ""),
+            "time": _workout_start(workout.get("start_time")),
+            "name": str(workout.get("name") or workout.get("title") or "Workout"),
+            "routine_id": str(workout.get("routine_id") or "") or None,
+            "volume_kg": round(sum(_to_float(item["volume_kg"]) for item in stats), 2),
+            "set_count": sum(int(item["sets"]) for item in stats),
+            "duration_min": _workout_duration_min(workout),
+        })
+    result.sort(key=lambda item: _parse_time(item["time"]))
+    return result
+
+
 def routine_analytics(
     payload: Mapping[str, Any], routine_id: str
 ) -> dict[str, Any]:

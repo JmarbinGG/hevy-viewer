@@ -19,6 +19,7 @@ from hevy_data_parser import (
     aggregate_routine_metrics,
     list_exercises,
     list_routines,
+    list_workouts,
     max_over_time,
     one_rep_max_over_time,
     parse_hevy_login_data,
@@ -194,6 +195,12 @@ def create_app() -> Flask:
         payload = _fetch_payload(credentials)
         entries = parse_hevy_login_data(payload)
         return jsonify({"exercises": list_exercises(entries)})
+
+    @app.post("/api/workouts")
+    def workouts() -> Any:
+        credentials = _parse_credentials(request.get_json(silent=True))
+        payload = _fetch_payload(credentials)
+        return jsonify({"workouts": list_workouts(payload)})
 
     @app.post("/api/routines")
     def routines() -> Any:

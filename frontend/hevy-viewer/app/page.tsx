@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { clearCachedCredentials, readCachedCredentials } from "./exercises/auth-cache";
+import { readCachedCredentials } from "./exercises/auth-cache";
+import { TopBar } from "./top-bar";
 import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchRoutines } from "./exercises/api";
 import { DataStatus, ExerciseSummary, MuscleComparisonRow, RoutineAnalytics, RoutineSummary } from "./exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "./settings";
@@ -40,7 +40,6 @@ function MiniStrip({ changes }: { changes: (number | null | undefined)[] }) {
 }
 
 export default function Home() {
-  const router = useRouter();
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [settings, setSettings] = useState<ViewerSettings>(readSettings);
   const [routines, setRoutines] = useState<RoutineSummary[]>([]);
@@ -114,11 +113,6 @@ export default function Home() {
     [exercises],
   );
 
-  function logout(): void {
-    clearCachedCredentials();
-    router.push("/login");
-  }
-
   if (signedIn === null) return <div className="app-shell min-h-screen" />;
 
   if (!signedIn) {
@@ -145,16 +139,8 @@ export default function Home() {
 
   return (
     <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-16 px-6 py-8 md:px-12 xl:px-16">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold tracking-tight">Hevy Viewer</h1>
-          <nav className="flex flex-wrap gap-3">
-            <Link href="/routines" className="control-button">Routines</Link>
-            <Link href="/exercises" className="control-button">Exercises</Link>
-            <Link href="/settings" className="control-button">Settings</Link>
-            <button type="button" onClick={logout} className="control-button">Log out</button>
-          </nav>
-        </header>
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-16 px-6 py-6 md:px-12 xl:px-16">
+        <TopBar />
 
         {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
 

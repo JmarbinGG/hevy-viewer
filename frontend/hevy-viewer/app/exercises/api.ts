@@ -1,4 +1,4 @@
-import { DataStatus, ExerciseGraphResponse, ExerciseSummary, HevyCredentials, LoginResponse, RoutineAnalytics, RoutineSummary } from "./types";
+import { DataStatus, ExerciseGraphResponse, ExerciseSummary, HevyCredentials, LoginResponse, RoutineAnalytics, RoutineSummary, WorkoutSummary } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_HEVY_API_URL ?? "http://127.0.0.1:5000";
 
@@ -107,4 +107,15 @@ export async function fetchAllRoutineAnalytics(
   });
   const data = await parseJsonResponse<{ analytics: Record<string, RoutineAnalytics> }>(response);
   return data.analytics;
+}
+
+export async function fetchWorkouts(credentials: HevyCredentials): Promise<WorkoutSummary[]> {
+  const response = await fetch(`${API_BASE_URL}/api/workouts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+    cache: "no-store",
+  });
+  const data = await parseJsonResponse<{ workouts: WorkoutSummary[] }>(response);
+  return data.workouts;
 }

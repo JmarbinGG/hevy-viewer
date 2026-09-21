@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clearCachedCredentials, readCachedCredentials } from "./auth-cache";
 import { fetchDataStatus, fetchExerciseGraph, fetchExercises, refreshData } from "./api";
@@ -9,6 +8,7 @@ import { EXERCISE_GRAPHS, GraphPoint, toTimeSeries } from "./graphs";
 import { DataStatus, ExerciseSummary, HevyCredentials } from "./types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
+import { TopBar } from "../top-bar";
 import { pct, shortDate, tone } from "../format";
 
 const METRIC_NAMES: Record<string, string> = {
@@ -31,7 +31,6 @@ function ExerciseImage({ url, className }: { url: string | null; className: stri
 }
 
 export default function ExercisesPage() {
-  const router = useRouter();
   const credentialsRef = useRef<HevyCredentials | null>(null);
   const [hasCredentials, setHasCredentials] = useState<boolean | null>(null);
   const [exercises, setExercises] = useState<ExerciseSummary[]>([]);
@@ -208,12 +207,6 @@ export default function ExercisesPage() {
         : `${shortDate(session.timestamp)}: ${metricName} ${change > 0 ? "up" : "down"} ${Math.abs(change).toFixed(0)}% on the session before.`;
   const weight = (value: number) => (value * factor).toFixed(1);
 
-  function logout(): void {
-    clearCachedCredentials();
-    credentialsRef.current = null;
-    router.push("/login");
-  }
-
   async function handleRefresh(): Promise<void> {
     const credentials = credentialsRef.current;
     if (!credentials || refreshing) {
@@ -248,16 +241,8 @@ export default function ExercisesPage() {
 
   return (
     <div className="app-shell min-h-screen md:h-dvh md:overflow-hidden">
-      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-6 px-6 py-5 md:h-full md:px-12 xl:px-16">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-lg font-semibold tracking-tight">Exercises</h1>
-          <nav className="flex flex-wrap gap-3">
-            <Link href="/routines" className="control-button">Routines</Link>
-            <Link href="/settings" className="control-button">Settings</Link>
-            <Link href="/" className="control-button">Home</Link>
-            <button type="button" onClick={logout} className="control-button">Log out</button>
-          </nav>
-        </header>
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-6 px-6 py-6 md:h-full md:px-12 xl:px-16">
+        <TopBar />
 
         {error ? <div className="border border-[var(--loss)] px-4 py-3 text-sm text-[var(--loss)]">{error}</div> : null}
 

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { applyTheme, readSettings, saveSettings, ViewerSettings } from "../settings";
+import { TopBar } from "../top-bar";
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<ViewerSettings>(() => readSettings());
@@ -23,21 +23,14 @@ export default function SettingsPage() {
 
   return (
     <div className="app-shell min-h-screen">
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-10 md:px-10">
-        <header className="flex flex-wrap items-end justify-between gap-5 border-b border-[var(--border)] pb-6">
-          <div>
-            <p className="eyebrow">Hevy Viewer</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight">Settings</h1>
-            <p className="mt-2 max-w-xl text-sm text-[var(--muted)]">
-              Tune how your training history is displayed. Changes are saved in this browser.
-            </p>
-          </div>
-          <Link href="/exercises" className="control-button">
-            Back to exercises
-          </Link>
-        </header>
+      <main className="mx-auto flex w-full max-w-[100rem] flex-col gap-10 px-6 py-6 md:px-12 xl:px-16">
+        <TopBar />
+        <div className="max-w-3xl">
+          <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
+          <p className="mt-2 max-w-xl text-sm text-[var(--muted)]">Tune how your training history is displayed. Changes are saved in this browser.</p>
+        </div>
 
-        <section className="space-y-8">
+        <section className="max-w-3xl space-y-8">
           <div className="settings-row">
             <div>
               <h2 className="text-base font-semibold">Weight units</h2>
