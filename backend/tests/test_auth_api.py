@@ -30,7 +30,7 @@ def bearer(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-@pytest.mark.parametrize("path", ["/api/exercises", "/api/routines", "/api/workouts", "/api/prs", "/api/routines/analytics", "/api/data-status"])
+@pytest.mark.parametrize("path", ["/api/exercises", "/api/routines", "/api/workouts", "/api/prs", "/api/program", "/api/routines/analytics", "/api/data-status"])
 def test_data_endpoints_require_a_session(client, path):
     method = client.get if path == "/api/data-status" else client.post
     response = method(path, json={"email_or_username": "lifter", "password": PASSWORD})
@@ -98,3 +98,11 @@ def test_password_store_verifies_without_keeping_plaintext(tmp_path):
     assert store.check("me@x.com", "nope") is False
     assert '"pw"' not in (tmp_path / "auth.json").read_text()
     assert (tmp_path / "auth.json").stat().st_mode & 0o077 == 0
+
+
+def test_program_endpoint_returns_a_plan_per_routine(client):
+    token = login(client).get_json()["token"]
+    body = client.post("/api/program", headers=bearer(token)).get_json()
+    assert set(body) == {"routines", "exercises"}
+    assert body["routines"][0]["title"] == "Push"
+    assert body["exercises"]["Bench Press"]["action"] in {"add_weight", "add_reps", "deload", "repeat"}

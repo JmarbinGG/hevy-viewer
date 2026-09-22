@@ -72,6 +72,19 @@ fewer than half of the session's muscle groups appear in the baseline. Warm-up s
 `POST /api/workouts` lists every workout (including ones outside a routine) and `POST /api/prs`
 returns the personal records Hevy flagged on sets, each with its change over the previous record.
 
+## Program and stall detection
+
+`POST /api/program` builds a next-session plan for every routine (most overdue first) and a plan
+for every exercise by name (`hevy_program.py`). Lifts follow double progression: add reps at the
+same weight until the top of the rep range (inferred from how many reps you usually do), then add
+one plate step (taken from your own weight jumps) and drop back to the bottom of the range.
+
+A lift is `stalled` after 4 sessions without a new best estimated 1RM (a new best beats the old
+one by at least 1%), and only once it has 6+ sessions of history. A stalled lift gets a deload:
+10% below your usual working weight, never above what you lifted last time. Lifts with fewer than
+3 sessions are `new` and just repeat. Bodyweight lifts progress by reps. A routine's lifts are
+those in its latest session or in at least 2 of its last 4.
+
 ## Sign-in and sessions
 
 `POST /api/auth/login` returns a random session token; every other endpoint needs

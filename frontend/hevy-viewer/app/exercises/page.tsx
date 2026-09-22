@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { clearCachedCredentials, readCachedCredentials } from "./auth-cache";
-import { fetchDataStatus, fetchExerciseGraph, fetchExercises, refreshData } from "./api";
+import { fetchDataStatus, fetchExerciseGraph, fetchExercises, fetchProgram, refreshData } from "./api";
 import { EXERCISE_GRAPHS, GraphPoint, toTimeSeries } from "./graphs";
-import { DataStatus, ExerciseSummary, HevyCredentials } from "./types";
+import { DataStatus, ExercisePlan, ExerciseSummary, HevyCredentials } from "./types";
+import { ACTION_LABEL, reasonText, targetText } from "../program-text";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
 import { FormStrip } from "../form-strip";
 import { TopBar } from "../top-bar";
@@ -44,6 +45,7 @@ export default function ExercisesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedGraphId, setSelectedGraphId] = useState(EXERCISE_GRAPHS[0]?.id ?? "");
   const [settings, setSettings] = useState<ViewerSettings>(readSettings);
+  const [plans, setPlans] = useState<Record<string, ExercisePlan>>({});
   const [query, setQuery] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -81,6 +83,8 @@ export default function ExercisesPage() {
           setDataStatus(status);
         }
         const data = await fetchExercises(credentials);
+        // The plan is a bonus; the page works without it.
+        void fetchProgram(credentials).then((program) => { if (!cancelled) setPlans(program.exercises); }).catch(() => undefined);
         if (cancelled) {
           return;
         }
@@ -313,6 +317,9 @@ export default function ExercisesPage() {
                     <h2 className="line-clamp-2 min-h-[2lh] min-w-0 text-3xl font-semibold leading-tight tracking-tight">{selected.name}</h2>
                   </div>
                   <p className="mt-2 min-h-[2lh] max-w-[52ch] text-lg text-[var(--muted)]">{headline}</p>
+                  <p className={`min-h-[1lh] max-w-[60ch] text-sm ${plans[selected.name]?.status === "stalled" ? "text-[var(--loss)]" : "text-[var(--muted)]"}`}>
+                    {plans[selected.name] ? `${plans[selected.name].status === "stalled" ? "Stalled. " : ""}Next: ${targetText(plans[selected.name], settings.unitSystem)} (${ACTION_LABEL[plans[selected.name].action].toLowerCase()}). ${plans[selected.name].status === "stalled" ? reasonText(plans[selected.name]) : ""}` : ""}
+                  </p>
                   <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-sm tabular-nums">
                       <div>
                         <dt className="text-[var(--muted)]">{metricName === "estimated 1RM" ? "Est. 1RM" : metricName === "top set" ? "Top set" : "Volume"}</dt>

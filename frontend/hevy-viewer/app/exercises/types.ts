@@ -204,3 +204,39 @@ export type PrResponse = {
   prs: PersonalRecord[];
   records: ExerciseRecord[];
 };
+
+export type PlanStatus = "new" | "progressing" | "steady" | "stalled";
+export type PlanAction = "add_weight" | "add_reps" | "deload" | "repeat";
+
+export type ExercisePlan = {
+  name: string;
+  muscle_group: string;
+  image_url: string | null;
+  metric: "1rm" | "reps";
+  sessions: number;
+  last_time: string;
+  last_top: { weight_kg: number; reps: number };
+  best_strength: number;
+  since_best: number;
+  status: PlanStatus;
+  action: PlanAction;
+  target: { weight_kg: number; reps: number; sets: number; rep_range: [number, number] };
+  reason: { code: "new" | "stalled" | "build_reps" | "hit_ceiling"; since_best?: number; deload_pct?: number; ceiling?: number };
+};
+
+export type RoutinePlan = {
+  routine_id: string;
+  title: string;
+  session_count: number;
+  last_session_time: string;
+  days_since: number;
+  typical_gap_days: number | null;
+  overdue_days: number;
+  stalled_count: number;
+  exercises: ExercisePlan[];
+};
+
+export type ProgramResponse = {
+  routines: RoutinePlan[];
+  exercises: Record<string, ExercisePlan>;
+};

@@ -16,6 +16,7 @@ from flask_cors import CORS
 import logging
 
 from hevy_auth import AuthError, HevyCredentials, PasswordStore, SessionStore
+from hevy_program import build_program
 from hevy_data_parser import (
     aggregate_routine_metrics,
     list_exercises,
@@ -246,6 +247,12 @@ def create_app() -> Flask:
         credentials = session_credentials()
         payload = _fetch_payload(credentials)
         return jsonify(list_prs(payload))
+
+    @app.post("/api/program")
+    def program() -> Any:
+        credentials = session_credentials()
+        payload = _fetch_payload(credentials)
+        return jsonify(build_program(payload))
 
     @app.post("/api/routines")
     def routines() -> Any:

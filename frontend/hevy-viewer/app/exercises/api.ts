@@ -7,6 +7,7 @@ import {
   LoginInput,
   LoginResponse,
   PrResponse,
+  ProgramResponse,
   RoutineAnalytics,
   RoutineSummary,
   WorkoutSummary,
@@ -117,4 +118,8 @@ export async function fetchWorkouts(session: HevyCredentials): Promise<WorkoutSu
 
 export function fetchPrs(session: HevyCredentials): Promise<PrResponse> {
   return request<PrResponse>("/api/prs", { session });
+}
+
+export function fetchProgram(session: HevyCredentials): Promise<ProgramResponse> {
+  return request<ProgramResponse>("/api/program", { session });
 }

@@ -7,6 +7,7 @@ import { clearCachedCredentials, readCachedCredentials } from "./exercises/auth-
 
 const LINKS = [
   { href: "/routines", label: "Routines" },
+  { href: "/program", label: "Program" },
   { href: "/exercises", label: "Exercises" },
   { href: "/prs", label: "Records" },
   { href: "/calendar", label: "Calendar" },

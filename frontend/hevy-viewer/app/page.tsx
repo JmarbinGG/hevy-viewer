@@ -5,11 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import { readCachedCredentials } from "./exercises/auth-cache";
 import { TopBar } from "./top-bar";
 import { ErrorNotice } from "./error-notice";
-import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchPrs, fetchRoutines } from "./exercises/api";
-import { DataStatus, ExerciseSummary, MuscleComparisonRow, PersonalRecord, RoutineAnalytics, RoutineSummary } from "./exercises/types";
+import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchPrs, fetchProgram, fetchRoutines } from "./exercises/api";
+import { DataStatus, ExercisePlan, ExerciseSummary, MuscleComparisonRow, PersonalRecord, RoutinePlan, RoutineAnalytics, RoutineSummary } from "./exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "./settings";
 import { pct, shortDate, tone, toneVar } from "./format";
 import { ChangeBar } from "./change-bar";
+import { lastText, targetText } from "./program-text";
 
 const MINI_SESSIONS = 16;
 const TOP_EXERCISES = 8;
@@ -48,6 +49,8 @@ export default function Home() {
   const [exercises, setExercises] = useState<ExerciseSummary[]>([]);
   const [status, setStatus] = useState<DataStatus | null>(null);
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
+  const [nextRoutine, setNextRoutine] = useState<RoutinePlan | null>(null);
+  const [stalled, setStalled] = useState<ExercisePlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,18 +70,21 @@ export default function Home() {
         return;
       }
       try {
-        const [routineList, allAnalytics, exerciseList, dataStatus, prData] = await Promise.all([
+        const [routineList, allAnalytics, exerciseList, dataStatus, prData, program] = await Promise.all([
           fetchRoutines(credentials),
           fetchAllRoutineAnalytics(credentials),
           fetchExercises(credentials),
           fetchDataStatus(credentials),
           fetchPrs(credentials),
+          fetchProgram(credentials),
         ]);
         setRoutines([...routineList].sort((a, b) => b.workout_count - a.workout_count || a.title.localeCompare(b.title)));
         setAnalytics(allAnalytics);
         setExercises(exerciseList);
         setStatus(dataStatus);
         setPrs(prData.prs.filter((pr) => !pr.is_first));
+        setNextRoutine(program.routines[0] ?? null);
+        setStalled(Object.values(program.exercises).filter((plan) => plan.status === "stalled").sort((a, b) => b.since_best - a.since_best));
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Could not load your data.");
       } finally {
@@ -194,6 +200,37 @@ export default function Home() {
               })}
             </ul>
           </div>
+        </section>
+
+        <section>
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-lg font-semibold">Needs attention</h3>
+            <Link href="/program" className="text-sm text-[var(--muted)] hover:text-[var(--accent)]">Open program</Link>
+          </div>
+          <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+            {loading ? <li className="py-4 text-sm text-[var(--muted)]">Loading...</li> : (
+              <>
+                {nextRoutine ? (
+                  <li>
+                    <Link href="/program" className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3 hover:bg-[var(--surface)]">
+                      <span className="text-sm font-medium">Next up: {nextRoutine.title}</span>
+                      <span className="text-xs text-[var(--muted)]">{nextRoutine.overdue_days >= 1 ? `${Math.round(nextRoutine.overdue_days)} days overdue` : nextRoutine.overdue_days <= -1 ? `due in ${Math.round(-nextRoutine.overdue_days)} days` : "due now"} · {nextRoutine.exercises.length} lifts</span>
+                    </Link>
+                  </li>
+                ) : null}
+                {stalled.slice(0, 4).map((plan) => (
+                  <li key={plan.name}>
+                    <Link href="/program" className="flex flex-wrap items-center gap-x-6 gap-y-1 border-l-2 border-[var(--loss)] py-3 pl-4 hover:bg-[var(--surface)]">
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{plan.name}</span>
+                      <span className="text-xs text-[var(--muted)]">no new best in {plan.since_best} sessions · was {lastText(plan, settings.unitSystem)}</span>
+                      <span className="text-sm font-semibold tabular-nums text-[var(--loss)]">{targetText(plan, settings.unitSystem)}</span>
+                    </Link>
+                  </li>
+                ))}
+                {stalled.length === 0 ? <li className="py-3 text-sm text-[var(--muted)]">Nothing has stalled.</li> : null}
+              </>
+            )}
+          </ul>
         </section>
 
         <section>
