@@ -103,6 +103,6 @@ def test_password_store_verifies_without_keeping_plaintext(tmp_path):
 def test_program_endpoint_returns_a_plan_per_routine(client):
     token = login(client).get_json()["token"]
     body = client.post("/api/program", headers=bearer(token)).get_json()
-    assert set(body) == {"routines", "exercises"}
+    assert set(body) == {"routines", "exercises", "latest_review"}
     assert body["routines"][0]["title"] == "Push"
     assert body["exercises"]["Bench Press"]["action"] in {"add_weight", "add_reps", "deload", "repeat"}

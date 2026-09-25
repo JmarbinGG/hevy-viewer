@@ -236,7 +236,33 @@ export type RoutinePlan = {
   exercises: ExercisePlan[];
 };
 
+export type ReviewStatus = "exceeded" | "met" | "short" | "baseline";
+export type ReviewVerdict = "ahead" | "on_plan" | "behind" | "new";
+
+export type ReviewExercise = {
+  name: string;
+  muscle_group: string;
+  actual: { weight_kg: number; reps: number };
+  target: { weight_kg: number; reps: number } | null;
+  status: ReviewStatus;
+};
+
+export type WorkoutReview = {
+  workout_id: string;
+  time: string;
+  workout_name: string;
+  routine_id: string | null;
+  compared: number;
+  exceeded: number;
+  met: number;
+  short: number;
+  score_pct: number | null;
+  verdict: ReviewVerdict;
+  exercises: ReviewExercise[];
+};
+
 export type ProgramResponse = {
   routines: RoutinePlan[];
   exercises: Record<string, ExercisePlan>;
+  latest_review: WorkoutReview | null;
 };

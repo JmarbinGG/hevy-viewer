@@ -85,6 +85,7 @@ def _history(payload: Mapping[str, Any]) -> dict[str, list[dict[str, Any]]]:
             weighted = any(weight > 0 for weight, _ in sets)
             top = max(sets, key=lambda item: (item[0], item[1])) if weighted else max(sets, key=lambda item: item[1])
             history[name].append({
+                "workout_id": str(workout.get("id") or ""),
                 "time": _workout_start(workout.get("start_time")),
                 "routine_id": str(workout.get("routine_id") or "") or None,
                 "position": position,
@@ -176,6 +177,101 @@ def exercise_plan(name: str, sessions: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+EFFORT_EXCEED_RATIO = 1.02   # actual effort this far above target counts as exceeding it
+EFFORT_MEET_RATIO = 0.98     # actual effort at least this fraction of target counts as meeting it
+
+
+def _effort(weight_kg: float, reps: float) -> float:
+    """A single number to compare a weighted or bodyweight set against a target."""
+    if weight_kg > 0:
+        return _set_estimated_1rm({"weight_kg": weight_kg, "reps": reps})
+    return reps
+
+
+def review_workout(payload: Mapping[str, Any], workout_id: str | None = None) -> dict[str, Any] | None:
+    """How a workout's actual sets compared with the plan that stood before it.
+
+    For each exercise in the workout, the plan is recomputed from only the sessions
+    strictly *before* it (the same target the lift would have shown going into that
+    session), then the actual top set is compared on estimated 1RM (or reps for
+    bodyweight lifts). Lifts done for the very first time have no target and are
+    left out of the score. ``workout_id`` defaults to the most recently logged
+    workout; returns ``None`` if there is nothing to review.
+    """
+    workouts = payload.get("workouts")
+    if not isinstance(workouts, list):
+        raise ValueError("Expected payload['workouts'] to be a list")
+    history = _history(payload)
+
+    if workout_id is None:
+        latest_time = max((session["time"] for sessions in history.values() for session in sessions), default=None)
+        if latest_time is None:
+            return None
+        workout_id = next(
+            session["workout_id"] for sessions in history.values() for session in sessions if session["time"] == latest_time
+        )
+
+    workout = next(
+        (item for item in workouts if isinstance(item, Mapping) and str(item.get("id") or "") == workout_id),
+        None,
+    )
+    if workout is None:
+        return None
+
+    results: list[dict[str, Any]] = []
+    for name, sessions in history.items():
+        index = next((position for position, session in enumerate(sessions) if session["workout_id"] == workout_id), None)
+        if index is None:
+            continue
+        prior = sessions[:index]
+        actual = sessions[index]
+        entry: dict[str, Any] = {
+            "name": name,
+            "muscle_group": actual["muscle_group"],
+            "actual": {"weight_kg": round(actual["top"][0], 2), "reps": actual["top"][1]},
+        }
+        if not prior:
+            entry["status"] = "baseline"
+            entry["target"] = None
+        else:
+            plan = exercise_plan(name, prior)
+            target = plan["target"]
+            actual_effort = _effort(actual["top"][0], actual["top"][1])
+            target_effort = _effort(target["weight_kg"], target["reps"])
+            ratio = actual_effort / target_effort if target_effort > 0 else 1.0
+            entry["status"] = "exceeded" if ratio >= EFFORT_EXCEED_RATIO else "met" if ratio >= EFFORT_MEET_RATIO else "short"
+            entry["target"] = {"weight_kg": target["weight_kg"], "reps": target["reps"]}
+        results.append(entry)
+
+    scored = [entry for entry in results if entry["status"] != "baseline"]
+    exceeded = sum(1 for entry in scored if entry["status"] == "exceeded")
+    met = sum(1 for entry in scored if entry["status"] == "met")
+    short = sum(1 for entry in scored if entry["status"] == "short")
+    score_pct = round((exceeded + met) / len(scored) * 100) if scored else None
+    if score_pct is None:
+        verdict = "new"
+    elif score_pct >= 80:
+        verdict = "ahead"
+    elif score_pct >= 50:
+        verdict = "on_plan"
+    else:
+        verdict = "behind"
+
+    return {
+        "workout_id": workout_id,
+        "time": _workout_start(workout.get("start_time")),
+        "workout_name": str(workout.get("name") or workout.get("title") or "Workout"),
+        "routine_id": str(workout.get("routine_id") or "") or None,
+        "compared": len(scored),
+        "exceeded": exceeded,
+        "met": met,
+        "short": short,
+        "score_pct": score_pct,
+        "verdict": verdict,
+        "exercises": sorted(results, key=lambda entry: {"short": 0, "met": 1, "baseline": 2, "exceeded": 3}[entry["status"]]),
+    }
+
+
 def build_program(payload: Mapping[str, Any], now: datetime | None = None) -> dict[str, Any]:
     """A next-session plan for every routine, plus the plan for every exercise by name."""
     now = now or datetime.now(timezone.utc)
@@ -223,4 +319,4 @@ def build_program(payload: Mapping[str, Any], now: datetime | None = None) -> di
             "exercises": exercises,
         })
     routines.sort(key=lambda routine: -routine["overdue_days"])
-    return {"routines": routines, "exercises": plans}
+    return {"routines": routines, "exercises": plans, "latest_review": review_workout(payload)}

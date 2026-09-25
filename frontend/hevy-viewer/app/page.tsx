@@ -6,11 +6,11 @@ import { readCachedCredentials } from "./exercises/auth-cache";
 import { TopBar } from "./top-bar";
 import { ErrorNotice } from "./error-notice";
 import { fetchAllRoutineAnalytics, fetchDataStatus, fetchExercises, fetchPrs, fetchProgram, fetchRoutines } from "./exercises/api";
-import { DataStatus, ExercisePlan, ExerciseSummary, MuscleComparisonRow, PersonalRecord, RoutinePlan, RoutineAnalytics, RoutineSummary } from "./exercises/types";
+import { DataStatus, ExercisePlan, ExerciseSummary, MuscleComparisonRow, PersonalRecord, RoutinePlan, RoutineAnalytics, RoutineSummary, WorkoutReview } from "./exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "./settings";
-import { pct, shortDate, tone, toneVar } from "./format";
+import { pct, prAmount, PR_TYPE_LABEL, shortDate, tone, toneVar } from "./format";
 import { ChangeBar } from "./change-bar";
-import { lastText, targetText } from "./program-text";
+import { lastText, reviewSummary, reviewTone, REVIEW_VERDICT_LABEL, targetText } from "./program-text";
 
 const MINI_SESSIONS = 16;
 const TOP_EXERCISES = 8;
@@ -22,6 +22,15 @@ function Tile({ url }: { url: string | null }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className="aspect-square w-full bg-white object-contain" />
+  );
+}
+
+function PrThumb({ url }: { url: string | null }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) return <div className="size-9 shrink-0 bg-[var(--surface)]" aria-hidden />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} className="size-9 shrink-0 bg-white object-contain" />
   );
 }
 
@@ -49,6 +58,7 @@ export default function Home() {
   const [exercises, setExercises] = useState<ExerciseSummary[]>([]);
   const [status, setStatus] = useState<DataStatus | null>(null);
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
+  const [review, setReview] = useState<WorkoutReview | null>(null);
   const [nextRoutine, setNextRoutine] = useState<RoutinePlan | null>(null);
   const [stalled, setStalled] = useState<ExercisePlan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,7 +92,8 @@ export default function Home() {
         setAnalytics(allAnalytics);
         setExercises(exerciseList);
         setStatus(dataStatus);
-        setPrs(prData.prs.filter((pr) => !pr.is_first));
+        setPrs(prData.prs);
+        setReview(program.latest_review);
         setNextRoutine(program.routines[0] ?? null);
         setStalled(Object.values(program.exercises).filter((plan) => plan.status === "stalled").sort((a, b) => b.since_best - a.since_best));
       } catch (err: unknown) {
@@ -121,10 +132,16 @@ export default function Home() {
   const prsThisMonth = useMemo(() => {
     const now = new Date();
     return prs.filter((pr) => {
+      if (pr.is_first) return false;
       const date = new Date(pr.time);
       return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
     }).length;
   }, [prs]);
+
+  const sessionHighlights = useMemo(
+    () => (review ? prs.filter((pr) => pr.workout_id === review.workout_id) : []),
+    [prs, review],
+  );
 
   const topExercises = useMemo(
     () => [...exercises].sort((a, b) => b.workout_count - a.workout_count || b.set_count - a.set_count).slice(0, TOP_EXERCISES),
@@ -177,28 +194,54 @@ export default function Home() {
             <p className="mt-8 text-sm tabular-nums text-[var(--muted)]">
               {loading ? "" : `${thisMonth} sessions and ${prsThisMonth} records this month · ${status?.workout_count ?? "—"} workouts logged · updated ${status?.last_updated ? shortDate(status.last_updated) : "—"}`}
             </p>
+            {review ? (
+              <p className="mt-3 text-sm">
+                <span className={`font-semibold ${reviewTone(review.verdict)}`}>{REVIEW_VERDICT_LABEL[review.verdict]}</span>
+                <span className="text-[var(--muted)]"> · {reviewSummary(review)}</span>
+              </p>
+            ) : null}
           </div>
 
-          <div>
-            <h3 className="text-lg font-semibold">Recent form</h3>
-            <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
-              {loading ? <li className="py-4 text-sm text-[var(--muted)]">Loading...</li> : routines.length === 0 ? <li className="py-4 text-sm text-[var(--muted)]">No routines found.</li> : routines.map((routine) => {
-                const points = analytics[routine.id]?.comparison_points ?? [];
-                const last = points[points.length - 1];
-                return (
-                  <li key={routine.id}>
-                    <Link href="/routines" className="block py-4 hover:bg-[var(--surface)]">
-                      <div className="flex items-baseline justify-between gap-4">
-                        <p className="truncate text-lg font-medium">{routine.title}</p>
-                        <p className={`text-lg font-semibold tabular-nums ${tone(last?.change_vs_previous_pct)}`}>{pct(last?.change_vs_previous_pct)}</p>
+          <div className="flex flex-col gap-12">
+            <div>
+              <h3 className="text-lg font-semibold">Recent form</h3>
+              <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                {loading ? <li className="py-4 text-sm text-[var(--muted)]">Loading...</li> : routines.length === 0 ? <li className="py-4 text-sm text-[var(--muted)]">No routines found.</li> : routines.map((routine) => {
+                  const points = analytics[routine.id]?.comparison_points ?? [];
+                  const last = points[points.length - 1];
+                  return (
+                    <li key={routine.id}>
+                      <Link href="/routines" className="block py-4 hover:bg-[var(--surface)]">
+                        <div className="flex items-baseline justify-between gap-4">
+                          <p className="truncate text-lg font-medium">{routine.title}</p>
+                          <p className={`text-lg font-semibold tabular-nums ${tone(last?.change_vs_previous_pct)}`}>{pct(last?.change_vs_previous_pct)}</p>
+                        </div>
+                        <div className="mt-2"><MiniStrip changes={points.slice(-MINI_SESSIONS).map((point) => point.change_vs_previous_pct)} /></div>
+                        <p className="mt-1 text-xs text-[var(--muted)]">{last ? `${shortDate(last.time)} · ` : ""}{routine.workout_count} sessions</p>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {sessionHighlights.length > 0 ? (
+              <div>
+                <h3 className="text-lg font-semibold">This session</h3>
+                <ul className="mt-4 divide-y divide-[var(--border)] border-y border-[var(--border)]">
+                  {sessionHighlights.map((pr) => (
+                    <li key={`${pr.exercise}-${pr.type}`} className="flex items-center gap-3 py-3">
+                      <PrThumb url={pr.image_url} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{pr.exercise}</p>
+                        <p className="truncate text-xs text-[var(--muted)]">{PR_TYPE_LABEL[pr.type]}{pr.is_first ? " · first time" : ""}</p>
                       </div>
-                      <div className="mt-2"><MiniStrip changes={points.slice(-MINI_SESSIONS).map((point) => point.change_vs_previous_pct)} /></div>
-                      <p className="mt-1 text-xs text-[var(--muted)]">{last ? `${shortDate(last.time)} · ` : ""}{routine.workout_count} sessions</p>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+                      <p className="shrink-0 text-sm font-semibold tabular-nums text-[var(--gain)]">{prAmount(pr.type, pr.value, settings.unitSystem)}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </div>
         </section>
 

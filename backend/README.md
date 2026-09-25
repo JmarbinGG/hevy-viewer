@@ -85,6 +85,14 @@ one by at least 1%), and only once it has 6+ sessions of history. A stalled lift
 3 sessions are `new` and just repeat. Bodyweight lifts progress by reps. A routine's lifts are
 those in its latest session or in at least 2 of its last 4.
 
+`build_program`'s response also includes `latest_review`: how the most recently logged workout
+compared with the plan that stood before it. Each exercise in that workout is checked against the
+plan `exercise_plan` would have given from only the sessions before it (same double-progression
+logic), then scored on estimated 1RM (reps for bodyweight lifts): `exceeded`, `met`, or `short` of
+target, with lifts done for the first time left out as a `baseline`. The overall `verdict` is
+`ahead` (80%+ of scored lifts met or beaten), `on_plan` (50%+), `behind`, or `new` (nothing to
+compare yet). Pass a `workout_id` to review an older session instead of the latest one.
+
 ## Sign-in and sessions
 
 `POST /api/auth/login` returns a random session token; every other endpoint needs

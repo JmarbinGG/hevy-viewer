@@ -72,3 +72,25 @@ export function planAsText(title: string, plans: ExercisePlan[], unit: Unit): st
   });
   return [`${title} — next session`, ...lines].join("\n");
 }
+
+export const REVIEW_VERDICT_LABEL: Record<import("./exercises/types").ReviewVerdict, string> = {
+  ahead: "Ahead of plan",
+  on_plan: "On plan",
+  behind: "Behind plan",
+  new: "New territory",
+};
+
+export function reviewTone(verdict: import("./exercises/types").ReviewVerdict): string {
+  if (verdict === "ahead") return "text-[var(--gain)]";
+  if (verdict === "behind") return "text-[var(--loss)]";
+  return "text-[var(--muted)]";
+}
+
+/** One line estimating how a workout went against the plan it followed into that session. */
+export function reviewSummary(review: import("./exercises/types").WorkoutReview | null): string {
+  if (!review) return "";
+  if (review.compared === 0) return "First time logging these lifts, so there's no plan yet to compare against.";
+  const hit = review.exceeded + review.met;
+  const detail = review.exceeded > 0 ? `, ${review.exceeded} of them by more than planned` : "";
+  return `Matched or beat the plan on ${hit} of ${review.compared} lifts${detail}.`;
+}

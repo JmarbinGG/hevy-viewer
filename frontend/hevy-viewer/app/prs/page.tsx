@@ -6,20 +6,12 @@ import { readCachedCredentials } from "../exercises/auth-cache";
 import { fetchPrs } from "../exercises/api";
 import { ExerciseRecord, PersonalRecord, PrResponse, PrType } from "../exercises/types";
 import { applyTheme, readSettings, ViewerSettings } from "../settings";
-import { pct, shortDate, tone } from "../format";
+import { pct, prAmount, PR_TYPE_LABEL, shortDate, tone } from "../format";
 import { TopBar } from "../top-bar";
 import { ErrorNotice } from "../error-notice";
 
 const PAGE_SIZE = 40;
 const RECENT_DAYS = 30;
-const LB = 2.20462;
-
-const TYPE_LABEL: Record<PrType, string> = {
-  best_1rm: "Estimated 1RM",
-  best_weight: "Heaviest set",
-  best_volume: "Best set volume",
-  best_reps: "Most reps",
-};
 
 const FILTERS: { id: PrType | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -38,13 +30,8 @@ function Thumb({ url, className }: { url: string | null; className: string }) {
   );
 }
 
-function amount(type: PrType, value: number, unit: "kg" | "lb"): string {
-  if (type === "best_reps") return `${Math.round(value)} reps`;
-  return `${(value * (unit === "lb" ? LB : 1)).toFixed(1)} ${unit}`;
-}
-
 function setDetail(pr: PersonalRecord, unit: "kg" | "lb"): string {
-  const weight = `${(pr.weight_kg * (unit === "lb" ? LB : 1)).toFixed(1)} ${unit}`;
+  const weight = prAmount("best_weight", pr.weight_kg, unit);
   if (pr.type === "best_reps") return pr.weight_kg > 0 ? `at ${weight}` : "bodyweight";
   if (pr.type === "best_weight") return `× ${pr.reps} reps`;
   return `${weight} × ${pr.reps}`;
@@ -165,12 +152,12 @@ export default function PrsPage() {
                         <Thumb url={pr.image_url} className="size-11" />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{pr.exercise}</p>
-                          <p className="truncate text-xs text-[var(--muted)]">{TYPE_LABEL[pr.type]} · {setDetail(pr, unit)}</p>
+                          <p className="truncate text-xs text-[var(--muted)]">{PR_TYPE_LABEL[pr.type]} · {setDetail(pr, unit)}</p>
                         </div>
                         <div className="shrink-0 text-right tabular-nums">
-                          <p className="text-lg font-semibold">{amount(pr.type, pr.value, unit)}</p>
+                          <p className="text-lg font-semibold">{prAmount(pr.type, pr.value, unit)}</p>
                           <p className={`text-xs ${pr.is_first ? "text-[var(--muted)]" : tone(pr.change_pct)}`}>
-                            {pr.is_first || pr.previous_value === null ? "First record" : `${pct(pr.change_pct)} from ${amount(pr.type, pr.previous_value, unit)}`}
+                            {pr.is_first || pr.previous_value === null ? "First record" : `${pct(pr.change_pct)} from ${prAmount(pr.type, pr.previous_value, unit)}`}
                           </p>
                         </div>
                       </li>
@@ -193,7 +180,7 @@ export default function PrsPage() {
                     <p className="text-xs text-[var(--muted)]">Last record {shortDate(record.last_pr_time)}</p>
                   </div>
                   <div className="shrink-0 text-right text-sm tabular-nums">
-                    {record.bests.best_1rm ? <p className="font-semibold">{amount("best_1rm", record.bests.best_1rm.value, unit)}</p> : record.bests.best_weight ? <p className="font-semibold">{amount("best_weight", record.bests.best_weight.value, unit)}</p> : record.bests.best_reps ? <p className="font-semibold">{amount("best_reps", record.bests.best_reps.value, unit)}</p> : null}
+                    {record.bests.best_1rm ? <p className="font-semibold">{prAmount("best_1rm", record.bests.best_1rm.value, unit)}</p> : record.bests.best_weight ? <p className="font-semibold">{prAmount("best_weight", record.bests.best_weight.value, unit)}</p> : record.bests.best_reps ? <p className="font-semibold">{prAmount("best_reps", record.bests.best_reps.value, unit)}</p> : null}
                     <p className="text-xs text-[var(--muted)]">{record.bests.best_1rm ? "est. 1RM" : record.bests.best_weight ? "heaviest" : "most reps"}</p>
                   </div>
                 </li>
